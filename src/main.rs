@@ -1,5 +1,7 @@
 use macroquad::prelude::*;
+use tinympc::rocket::*;
 
+// Constants for colors and sizes
 const SPACE_BACKGROUND: Color = Color::new(0.05, 0.05, 0.2, 1.0);
 const GROUND_CRUST_COLOR: Color = Color::new(0.1, 0.05, 0.05, 1.0);
 const GROUND_INTERIOR_COLOR: Color = Color::new(0.25, 0.2, 0.15, 1.0);
@@ -8,6 +10,7 @@ const GROUND_CRUST_THICKNESS: f32 = 10.0;
 struct Game {
     stars: Vec<(f32, f32, f32)>,
     ground_height: f32,
+    rocket: Rocket,
 }
 
 impl Game {
@@ -20,9 +23,13 @@ impl Game {
             stars.push((x, y, radius));
         }
 
+        // Position rocket at center of screen
+        let rocket = Rocket::new(screen_width() / 2.0, screen_height() * 0.8);
+
         Self {
             stars,
             ground_height: screen_height() * 0.8,
+            rocket,
         }
     }
 
@@ -31,8 +38,6 @@ impl Game {
         for star in self.stars.iter_mut() {
             star.0 -= 0.1;
             if star.0 < 0.0 {
-                // Replacing star pushed out of the left edge of the screen
-                // with a new random star in the right edge of the screen
                 star.0 = screen_width();
                 star.1 = rand::gen_range(0.0, screen_height() * 0.5);
             }
@@ -65,13 +70,15 @@ impl Game {
             screen_height() - self.ground_height - GROUND_CRUST_THICKNESS,
             GROUND_INTERIOR_COLOR,
         );
+
+        // Draw rocket
+        self.rocket.draw();
     }
 }
 
 #[macroquad::main("Testing")]
 async fn main() {
     let mut game = Game::new();
-
     loop {
         game.update();
         game.draw();
