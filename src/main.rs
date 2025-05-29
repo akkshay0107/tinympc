@@ -1,4 +1,5 @@
 use macroquad::prelude::*;
+use tinympc::path_drawer::PathDrawer;
 use tinympc::rocket::*;
 
 // Constants for colors and sizes
@@ -87,25 +88,30 @@ impl Game {
         self.draw_space_atmos();
 
         // Stars
-        for star in &self.stars {
-            draw_circle(star.0, star.1, star.2, WHITE);
+        for (x, y, radius) in &self.stars {
+            draw_circle(*x, *y, *radius, WHITE);
         }
 
         // Ground crust
+        let screen_w = screen_width();
+        let screen_h = screen_height();
+        let ground_y = self.ground_height;
+
+        // Draw ground crust
         draw_rectangle(
             0.0,
-            self.ground_height,
-            screen_width(),
+            ground_y - GROUND_CRUST_THICKNESS,
+            screen_w,
             GROUND_CRUST_THICKNESS,
             GROUND_CRUST_COLOR,
         );
 
-        // Ground interior
+        // Draw ground interior
         draw_rectangle(
             0.0,
-            self.ground_height + GROUND_CRUST_THICKNESS,
-            screen_width(),
-            screen_height() - self.ground_height - GROUND_CRUST_THICKNESS,
+            ground_y,
+            screen_w,
+            screen_h - ground_y,
             GROUND_INTERIOR_COLOR,
         );
 
@@ -114,12 +120,23 @@ impl Game {
     }
 }
 
-#[macroquad::main("Testing")]
+// #[macroquad::main("Scene Testing")]
+// async fn main() {
+//     let mut game = Game::new();
+//     loop {
+//         game.update();
+//         game.draw();
+//         next_frame().await
+//     }
+// }
+
+#[macroquad::main("Draw Testing")]
 async fn main() {
-    let mut game = Game::new();
+    let mut path_test = PathDrawer::new();
     loop {
-        game.update();
-        game.draw();
+        clear_background(WHITE);
+        path_test.update();
+        path_test.draw();
         next_frame().await
     }
 }
