@@ -1,7 +1,15 @@
+//! Module for drawing the rockets path
+//!
+//! Stores the history of the mouse's path and draws a line following it
+//! Only allows for one stroke (since the rocket's path should only be one
+//! continuous line) and limits the length of the path (equivalent to fuel
+//! on a rocket)
+
 use macroquad::prelude::*;
 
-const MIN_DIST: f32 = 1.0; // one pixel
-const LINE_THICKNESS: f32 = 2.0;
+const MIN_DIST: f32 = 1.0; // Minimum distance between two points in the path (One pixel)
+const LINE_THICKNESS: f32 = 2.0; // Thickness of line drawn
+const MAX_FUEL_LIMIT: i32 = 1000; // Maximum count of mouse history stored before line breaks
 
 pub struct PathDrawer {
     points: Vec<Vec2>,
@@ -43,7 +51,7 @@ impl PathDrawer {
                 }
             }
         } else if self.is_drawing {
-            // Only mark stroke as complete if we were drawing and mouse button is released
+            // Stroke completed if currently drawing + mouse released
             self.is_drawing = false;
             self.stroke_complete = true;
         }

@@ -1,10 +1,14 @@
+//! Module for managing the rocket sprite
+//!
+//! This module contains the implementation for the rocket sprite
+
 use macroquad::prelude::*;
 
 pub const ROCKET_WIDTH: f32 = 10.0;
 pub const ROCKET_HEIGHT: f32 = 40.0;
 pub const ROCKET_BASE: Color = Color::new(0.6, 0.6, 0.65, 1.0); // Blue-gray
 pub const ROCKET_HIGHLIGHT: Color = Color::new(0.9, 0.9, 0.95, 1.0); // Chrome
-pub const ROCKET_SHADOW: Color = Color::new(0.4, 0.4, 0.45, 1.0); // Dark gray
+pub const ROCKET_SHADOW: Color = Color::new(0.4, 0.4, 0.45, 1.0); // Dark-gray
 
 pub struct Rocket {
     x: f32,
