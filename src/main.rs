@@ -2,7 +2,6 @@ use macroquad::prelude::*;
 use tinympc::path_drawer::PathDrawer;
 use tinympc::rocket::*;
 
-// Constants for colors and sizes
 const GROUND_CRUST_COLOR: Color = Color::new(0.4, 0.2, 0.1, 1.0); // Darker than interior
 const GROUND_INTERIOR_COLOR: Color = Color::new(0.6, 0.4, 0.2, 1.0); // Tan color
 const GROUND_CRUST_THICKNESS: f32 = 10.0;
@@ -97,7 +96,6 @@ impl Game {
         let screen_h = screen_height();
         let ground_y = self.ground_height;
 
-        // Draw ground crust
         draw_rectangle(
             0.0,
             ground_y - GROUND_CRUST_THICKNESS,
@@ -106,7 +104,7 @@ impl Game {
             GROUND_CRUST_COLOR,
         );
 
-        // Draw ground interior
+        // Ground interior
         draw_rectangle(
             0.0,
             ground_y,

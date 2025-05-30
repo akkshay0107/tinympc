@@ -7,15 +7,17 @@
 
 use macroquad::prelude::*;
 
-const MIN_DIST: f32 = 1.0; // Minimum distance between two points in the path (One pixel)
-const LINE_THICKNESS: f32 = 2.0; // Thickness of line drawn
-const MAX_FUEL_LIMIT: i32 = 1000; // Maximum count of mouse history stored before line breaks
+const MIN_DIST: f32 = 1.0; // Minimum distance between points (one pixel)
+const LINE_THICKNESS: f32 = 2.0;
+const MAX_FUEL: f32 = 100.0;
+const FUEL_PER_PIXEL: f32 = 0.1;
 
 pub struct PathDrawer {
     points: Vec<Vec2>,
     is_drawing: bool,
     last_point: Option<Vec2>,
     stroke_complete: bool,
+    fuel: f32,
 }
 
 impl PathDrawer {
@@ -25,6 +27,7 @@ impl PathDrawer {
             is_drawing: false,
             last_point: None,
             stroke_complete: false,
+            fuel: MAX_FUEL,
         }
     }
 
@@ -34,24 +37,32 @@ impl PathDrawer {
         }
 
         if is_mouse_button_down(MouseButton::Left) {
-            let current_point = mouse_position().into();
-
-            if !self.is_drawing {
+            let current_point: Vec2 = mouse_position().into();
+            if self.is_drawing {
+                if let Some(last) = self.last_point {
+                    let distance = (current_point - last).length();
+                    if distance < MIN_DIST {
+                        return;
+                    }
+                    let fuel_needed = FUEL_PER_PIXEL * distance;
+                    if self.fuel >= fuel_needed {
+                        self.points.push(current_point);
+                        self.last_point = Some(current_point);
+                        self.fuel -= fuel_needed;
+                    } else {
+                        // Not enough fuel to continue drawing
+                        // Breaks stroke
+                        self.is_drawing = false;
+                        self.stroke_complete = true;
+                    }
+                }
+            } else {
                 self.points.push(current_point);
                 self.last_point = Some(current_point);
                 self.is_drawing = true;
-            } else {
-                // Add new point only if it's far enough from the last point
-                if let Some(last) = self.last_point {
-                    let distance = (current_point - last).length();
-                    if distance > MIN_DIST {
-                        self.points.push(current_point);
-                        self.last_point = Some(current_point);
-                    }
-                }
             }
         } else if self.is_drawing {
-            // Stroke completed if currently drawing + mouse released
+            // Stroke complete if currently drawing and then mouse release triggered
             self.is_drawing = false;
             self.stroke_complete = true;
         }
@@ -73,5 +84,29 @@ impl PathDrawer {
                 draw_line(last.x, last.y, current.x, current.y, LINE_THICKNESS, RED);
             }
         }
+
+        // Fuel gauge
+        let screen_w = screen_width();
+        let screen_h = screen_height();
+        let gauge_width = 100.0;
+        let gauge_height = 20.0;
+        let gauge_x = screen_w - gauge_width - 10.0;
+        let gauge_y = screen_h - gauge_height - 10.0;
+        draw_rectangle(
+            gauge_x,
+            gauge_y,
+            gauge_width,
+            gauge_height,
+            Color::new(0.2, 0.2, 0.2, 1.0),
+        );
+        draw_rectangle(
+            gauge_x,
+            gauge_y,
+            gauge_width * (self.fuel / MAX_FUEL),
+            gauge_height,
+            ORANGE,
+        );
+        // Fuel gauge border
+        draw_rectangle_lines(gauge_x, gauge_y, gauge_width, gauge_height, 2.0, WHITE);
     }
 }
