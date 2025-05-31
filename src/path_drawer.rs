@@ -14,20 +14,25 @@ const FUEL_PER_PIXEL: f32 = 0.1;
 
 pub struct PathDrawer {
     points: Vec<Vec2>,
-    is_drawing: bool,
     last_point: Option<Vec2>,
-    stroke_complete: bool,
+    trigger_center: Vec2,
+    tolerance_radius: f32,
     fuel: f32,
+    stroke_complete: bool,
+    is_drawing: bool,
 }
 
 impl PathDrawer {
-    pub fn new() -> Self {
+    pub fn new(trigger_x: f32, trigger_y: f32, tolerance_radius: f32) -> Self {
+        let trigger_center = Vec2::new(trigger_x, trigger_y);
         PathDrawer {
             points: Vec::new(),
             is_drawing: false,
             last_point: None,
             stroke_complete: false,
             fuel: MAX_FUEL,
+            trigger_center,
+            tolerance_radius,
         }
     }
 
@@ -63,8 +68,10 @@ impl PathDrawer {
             }
         } else if self.is_drawing {
             // Stroke complete if currently drawing and then mouse release triggered
+            // setting fuel to 0 for consistency with fuel gauge
             self.is_drawing = false;
             self.stroke_complete = true;
+            self.fuel = 0.0;
         }
     }
 

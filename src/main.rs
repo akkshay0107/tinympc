@@ -11,6 +11,7 @@ struct Game {
     stars: Vec<(f32, f32, f32)>,
     ground_height: f32,
     rocket: Rocket,
+    // path_input: PathDrawer,
 }
 
 impl Game {
@@ -24,10 +25,12 @@ impl Game {
         }
 
         let rocket = Rocket::new(screen_width() / 2.0, screen_height() * 0.8);
+        // let path_input = PathDrawer::new();
         Self {
             stars,
             ground_height: screen_height() * 0.8,
             rocket,
+            // path_input,
         }
     }
 
@@ -40,6 +43,8 @@ impl Game {
                 star.1 = rand::gen_range(0.0, screen_height() * 0.5);
             }
         }
+
+        // self.path_input.update();
     }
 
     fn draw_space_atmos(&self) {
@@ -115,6 +120,7 @@ impl Game {
 
         // Draw rocket
         self.rocket.draw();
+        // self.path_input.draw();
     }
 }
 
@@ -127,14 +133,17 @@ impl Game {
 //         next_frame().await
 //     }
 // }
+//
 
 #[macroquad::main("Draw Testing")]
 async fn main() {
-    let mut path_test = PathDrawer::new();
+    let screen_w = screen_width();
+    let screen_h = screen_height();
+    let mut path_input = PathDrawer::new(screen_w / 2.0, screen_h / 2.0, 20.0);
     loop {
         clear_background(WHITE);
-        path_test.update();
-        path_test.draw();
+        path_input.update();
+        path_input.draw();
         next_frame().await
     }
 }
