@@ -12,6 +12,9 @@ const LINE_THICKNESS: f32 = 2.0;
 const MAX_FUEL: f32 = 100.0;
 const FUEL_PER_PIXEL: f32 = 0.1;
 
+// TODO:
+// - add smoothing to lines after stroke complete
+// - prevent lines from touching the ground
 pub struct PathDrawer {
     points: Vec<Vec2>,
     last_point: Option<Vec2>,
@@ -61,7 +64,9 @@ impl PathDrawer {
                         self.stroke_complete = true;
                     }
                 }
-            } else {
+            } else if (current_point - self.trigger_center).length() <= self.tolerance_radius {
+                // Only allow stroke to begin when mouse starts click
+                // within tolerance around the trigger center
                 self.points.push(current_point);
                 self.last_point = Some(current_point);
                 self.is_drawing = true;
