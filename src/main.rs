@@ -11,7 +11,7 @@ struct Game {
     stars: Vec<(f32, f32, f32)>,
     ground_height: f32,
     rocket: Rocket,
-    // path_input: PathDrawer,
+    path_input: PathDrawer,
 }
 
 impl Game {
@@ -24,13 +24,16 @@ impl Game {
             stars.push((x, y, radius));
         }
 
-        let rocket = Rocket::new(screen_width() / 2.0, screen_height() * 0.8);
-        // let path_input = PathDrawer::new();
+        let rocket_x = screen_width() / 2.0;
+        let ground_y = screen_height() * 0.8;
+        let rocket = Rocket::new(rocket_x, ground_y);
+        let tolerance_radius = 8.0;
+        let path_input = PathDrawer::new(rocket_x, ground_y - ROCKET_HEIGHT, tolerance_radius);
         Self {
             stars,
-            ground_height: screen_height() * 0.8,
+            ground_height: ground_y,
             rocket,
-            // path_input,
+            path_input,
         }
     }
 
@@ -44,7 +47,7 @@ impl Game {
             }
         }
 
-        // self.path_input.update();
+        self.path_input.update();
     }
 
     fn draw_space_atmos(&self) {
@@ -120,30 +123,16 @@ impl Game {
 
         // Draw rocket
         self.rocket.draw();
-        // self.path_input.draw();
+        self.path_input.draw();
     }
 }
 
-// #[macroquad::main("Scene Testing")]
-// async fn main() {
-//     let mut game = Game::new();
-//     loop {
-//         game.update();
-//         game.draw();
-//         next_frame().await
-//     }
-// }
-//
-
-#[macroquad::main("Draw Testing")]
+#[macroquad::main("Scene Testing")]
 async fn main() {
-    let screen_w = screen_width();
-    let screen_h = screen_height();
-    let mut path_input = PathDrawer::new(screen_w / 2.0, screen_h / 2.0, 20.0);
+    let mut game = Game::new();
     loop {
-        clear_background(WHITE);
-        path_input.update();
-        path_input.draw();
+        game.update();
+        game.draw();
         next_frame().await
     }
 }

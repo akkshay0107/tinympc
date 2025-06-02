@@ -9,8 +9,8 @@ use macroquad::prelude::*;
 
 const MIN_DIST: f32 = 1.0; // Minimum distance between points (one pixel)
 const LINE_THICKNESS: f32 = 2.0;
-const MAX_FUEL: f32 = 100.0;
-const FUEL_PER_PIXEL: f32 = 0.1;
+pub const MAX_FUEL: f32 = 50.0;
+pub const FUEL_PER_PIXEL: f32 = 0.1;
 
 // TODO:
 // - add smoothing to lines after stroke complete
