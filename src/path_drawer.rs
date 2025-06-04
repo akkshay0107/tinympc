@@ -7,20 +7,20 @@
 
 use macroquad::prelude::*;
 
+use crate::rocket::ROCKET_HEIGHT;
+
 const MIN_DIST: f32 = 1.0; // Minimum distance between points (one pixel)
 const LINE_THICKNESS: f32 = 2.0;
 pub const MAX_FUEL: f32 = 50.0;
 pub const FUEL_PER_PIXEL: f32 = 0.1;
 
-// TODO:
-// - add smoothing to lines after stroke complete
-// - prevent lines from touching the ground
 pub struct PathDrawer {
     points: Vec<Vec2>,
     last_point: Option<Vec2>,
     trigger_center: Vec2,
     tolerance_radius: f32,
     fuel: f32,
+    fix_applied: bool,
     stroke_complete: bool,
     is_drawing: bool,
 }
@@ -33,6 +33,7 @@ impl PathDrawer {
             is_drawing: false,
             last_point: None,
             stroke_complete: false,
+            fix_applied: false,
             fuel: MAX_FUEL,
             trigger_center,
             tolerance_radius,
@@ -41,6 +42,10 @@ impl PathDrawer {
 
     pub fn update(&mut self) {
         if self.stroke_complete {
+            if !self.fix_applied {
+                self.fix_path();
+                self.fix_applied = true;
+            }
             return;
         }
 
@@ -120,5 +125,18 @@ impl PathDrawer {
         );
         // Fuel gauge border
         draw_rectangle_lines(gauge_x, gauge_y, gauge_width, gauge_height, 2.0, WHITE);
+    }
+
+    // TODO:
+    // - add smoothing to lines after stroke complete
+    fn fix_path(&mut self) {
+        // Prevent rocket path from clipping into the ground
+        let y_limit = (screen_height() * 0.8) - (ROCKET_HEIGHT / 2.0);
+
+        // Find first point that clips below the ground limit
+        if let Some(clip_index) = self.points.iter().position(|point| point.y > y_limit) {
+            // Remove all points from the clipping point onward
+            self.points.truncate(clip_index);
+        }
     }
 }
