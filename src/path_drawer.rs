@@ -128,7 +128,7 @@ impl PathDrawer {
     }
 
     // TODO:
-    // - add smoothing to lines after stroke complete
+    // - find better smoothing algorithm (that can handle multiple yvals for one xval)
     fn fix_path(&mut self) {
         // Prevent rocket path from clipping into the ground
         let y_limit = (screen_height() * 0.8) - (ROCKET_HEIGHT / 2.0);
@@ -137,6 +137,93 @@ impl PathDrawer {
         if let Some(clip_index) = self.points.iter().position(|point| point.y > y_limit) {
             // Remove all points from the clipping point onward
             self.points.truncate(clip_index);
+        }
+
+        // Approximate the path with cubic polynomial
+        // coefficients found by optimizing least squares
+        if self.points.len() > 3 {
+            let mut smoothed_points = Vec::with_capacity(self.points.len());
+
+            let n = self.points.len();
+            let mut x = vec![0.0; n];
+            let mut y = vec![0.0; n];
+
+            // Normalize x to [0, 1] range
+            for (i, point) in self.points.iter().enumerate() {
+                x[i] = i as f32 / (n - 1) as f32;
+                y[i] = point.y;
+            }
+            let degree = 3;
+            let mut a = vec![0.0; degree + 1]; // stores coefficients of x^k
+
+            let mut sum_x = vec![0.0; 2 * degree + 1];
+            let mut sum_xy = vec![0.0; degree + 1];
+
+            for i in 0..n {
+                let xi = x[i];
+                let yi = y[i];
+                let mut x_pow = 1.0;
+                for j in 0..sum_x.len() {
+                    sum_x[j] += x_pow;
+                    x_pow *= xi;
+                }
+                x_pow = 1.0;
+                for j in 0..sum_xy.len() {
+                    sum_xy[j] += x_pow * yi;
+                    x_pow *= xi;
+                }
+            }
+            // set up matrix equation
+            let mut matrix = vec![vec![0.0; degree + 1]; degree + 1];
+            for i in 0..=degree {
+                for j in 0..=degree {
+                    matrix[i][j] = sum_x[i + j];
+                }
+            }
+            // gaussian elimination
+            for i in 0..=degree {
+                let mut max_row = i;
+                for j in i + 1..=degree {
+                    if matrix[j][i].abs() > matrix[max_row][i].abs() {
+                        max_row = j;
+                    }
+                }
+                matrix.swap(i, max_row);
+                sum_xy.swap(i, max_row);
+                let pivot = matrix[i][i];
+                for j in i..=degree {
+                    matrix[i][j] /= pivot;
+                }
+                sum_xy[i] /= pivot;
+                for j in 0..=degree {
+                    if j != i {
+                        let factor = matrix[j][i];
+                        for k in i..=degree {
+                            matrix[j][k] -= factor * matrix[i][k];
+                        }
+                        sum_xy[j] -= factor * sum_xy[i];
+                    }
+                }
+            }
+
+            for i in 0..=degree {
+                a[i] = sum_xy[i];
+            }
+
+            let num_points = self.points.len();
+            for i in 0..num_points {
+                let t = i as f32 / (num_points - 1) as f32;
+                let mut y = 0.0;
+                let mut t_pow = 1.0;
+                for j in 0..=degree {
+                    y += a[j] * t_pow;
+                    t_pow *= t;
+                }
+                // Calculate x position based on original path
+                let x = self.points[0].x + t * (self.points.last().unwrap().x - self.points[0].x);
+                smoothed_points.push(Vec2::new(x, y));
+            }
+            self.points = smoothed_points;
         }
     }
 }
