@@ -127,8 +127,6 @@ impl PathDrawer {
         draw_rectangle_lines(gauge_x, gauge_y, gauge_width, gauge_height, 2.0, WHITE);
     }
 
-    // TODO:
-    // - find better smoothing algorithm (that can handle multiple yvals for one xval)
     fn fix_path(&mut self) {
         // Prevent rocket path from clipping into the ground
         let y_limit = (screen_height() * 0.8) - (ROCKET_HEIGHT / 2.0);
@@ -139,91 +137,46 @@ impl PathDrawer {
             self.points.truncate(clip_index);
         }
 
-        // Approximate the path with cubic polynomial
-        // coefficients found by optimizing least squares
-        if self.points.len() > 3 {
-            let mut smoothed_points = Vec::with_capacity(self.points.len());
+        // Iron out wiggles from mouse movement with Catmull-Rom spline
+        const STEPS: usize = 5;
+        // 4 points needed for spline interpolation
+        if self.points.len() >= 4 {
+            let original_points = std::mem::take(&mut self.points);
+            self.points.reserve(original_points.len() * STEPS + 2);
+            self.points.push(original_points[0]);
 
-            let n = self.points.len();
-            let mut x = vec![0.0; n];
-            let mut y = vec![0.0; n];
-
-            // Normalize x to [0, 1] range
-            for (i, point) in self.points.iter().enumerate() {
-                x[i] = i as f32 / (n - 1) as f32;
-                y[i] = point.y;
-            }
-            let degree = 3;
-            let mut a = vec![0.0; degree + 1]; // stores coefficients of x^k
-
-            let mut sum_x = vec![0.0; 2 * degree + 1];
-            let mut sum_xy = vec![0.0; degree + 1];
-
-            for i in 0..n {
-                let xi = x[i];
-                let yi = y[i];
-                let mut x_pow = 1.0;
-                for j in 0..sum_x.len() {
-                    sum_x[j] += x_pow;
-                    x_pow *= xi;
-                }
-                x_pow = 1.0;
-                for j in 0..sum_xy.len() {
-                    sum_xy[j] += x_pow * yi;
-                    x_pow *= xi;
+            for window in original_points.windows(4) {
+                for step in 0..=STEPS {
+                    let t = step as f32 / STEPS as f32;
+                    self.points.push(Self::catmull_rom_point(window, t));
                 }
             }
-            // set up matrix equation
-            let mut matrix = vec![vec![0.0; degree + 1]; degree + 1];
-            for i in 0..=degree {
-                for j in 0..=degree {
-                    matrix[i][j] = sum_x[i + j];
-                }
-            }
-            // gaussian elimination
-            for i in 0..=degree {
-                let mut max_row = i;
-                for j in i + 1..=degree {
-                    if matrix[j][i].abs() > matrix[max_row][i].abs() {
-                        max_row = j;
-                    }
-                }
-                matrix.swap(i, max_row);
-                sum_xy.swap(i, max_row);
-                let pivot = matrix[i][i];
-                for j in i..=degree {
-                    matrix[i][j] /= pivot;
-                }
-                sum_xy[i] /= pivot;
-                for j in 0..=degree {
-                    if j != i {
-                        let factor = matrix[j][i];
-                        for k in i..=degree {
-                            matrix[j][k] -= factor * matrix[i][k];
-                        }
-                        sum_xy[j] -= factor * sum_xy[i];
-                    }
-                }
-            }
-
-            for i in 0..=degree {
-                a[i] = sum_xy[i];
-            }
-
-            let num_points = self.points.len();
-            for i in 0..num_points {
-                let t = i as f32 / (num_points - 1) as f32;
-                let mut y = 0.0;
-                let mut t_pow = 1.0;
-                for j in 0..=degree {
-                    y += a[j] * t_pow;
-                    t_pow *= t;
-                }
-                // Calculate x position based on original path
-                let x = self.points[0].x + t * (self.points.last().unwrap().x - self.points[0].x);
-                smoothed_points.push(Vec2::new(x, y));
-            }
-            self.points = smoothed_points;
+            self.points.push(original_points[original_points.len() - 1]);
         }
+    }
+
+    fn catmull_rom_point(control_points: &[Vec2], t: f32) -> Vec2 {
+        let [p0, p1, p2, p3] = [
+            control_points[0],
+            control_points[1],
+            control_points[2],
+            control_points[3],
+        ];
+        let t2 = t * t;
+        let t3 = t2 * t;
+
+        let x = 0.5
+            * ((2.0 * p1.x)
+                + (-p0.x + p2.x) * t
+                + (2.0 * p0.x - 5.0 * p1.x + 4.0 * p2.x - p3.x) * t2
+                + (-p0.x + 3.0 * p1.x - 3.0 * p2.x + p3.x) * t3);
+
+        let y = 0.5
+            * ((2.0 * p1.y)
+                + (-p0.y + p2.y) * t
+                + (2.0 * p0.y - 5.0 * p1.y + 4.0 * p2.y - p3.y) * t2
+                + (-p0.y + 3.0 * p1.y - 3.0 * p2.y + p3.y) * t3);
+
+        Vec2::new(x, y)
     }
 }
