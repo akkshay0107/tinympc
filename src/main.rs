@@ -7,6 +7,7 @@ const GROUND_CRUST_COLOR: Color = Color::new(0.4, 0.2, 0.1, 1.0); // Darker than
 const GROUND_INTERIOR_COLOR: Color = Color::new(0.6, 0.4, 0.2, 1.0); // Tan color
 const GROUND_CRUST_THICKNESS: f32 = 10.0;
 const PARALLAX_SCROLL_SPEED: f32 = 0.08;
+const PIXELS_PER_METER: f32 = 10.0;
 
 struct Game {
     stars: Vec<(f32, f32, f32)>,
@@ -98,9 +99,14 @@ impl Game {
 
     /// Function to transform coordinates from the physics engine (real life)
     /// to in game coordinates, in order to display it correctly
-    fn transform() {
-        // TODO - create a coordinate transform from physics in real life to
-        // in game pixels (in game y increases as ball falls down, flip gravity maybe)
+    fn transform(x: f32, y: f32) -> (f32, f32) {
+        // ground ranges from (0.8 to 1) * screen height
+        // = 480 - 600 when screen height 600 px
+        // 480 pixels = 0 m & +10 px = -1 m
+        let ground_y = screen_height() * 0.8;
+        let xx = x * PIXELS_PER_METER;
+        let yy = ground_y - y * PIXELS_PER_METER;
+        (xx, yy)
     }
 
     fn draw(&self) {
@@ -148,17 +154,17 @@ async fn main() {
 
     // Rigid body for the ground
     let ground = RigidBodyBuilder::fixed()
-        .translation(vector![0.0, 0.1])
+        .translation(vector![50.0, -6.0])
         .build();
     let ground_handle = rigid_body_set.insert(ground);
-    let collider = ColliderBuilder::cuboid(100.0, 0.1).restitution(0.5).build();
+    let collider = ColliderBuilder::cuboid(50.0, 6.0).restitution(0.5).build();
     collider_set.insert_with_parent(collider, ground_handle, &mut rigid_body_set);
 
     // Rigid body for the ball
     let ball = RigidBodyBuilder::dynamic()
-        .translation(vector![0.0, 10.0])
+        .translation(vector![40.0, 40.0])
         .build();
-    let radius = 0.5;
+    let radius = 2.0;
     let collider = ColliderBuilder::ball(radius).restitution(0.5).build();
     let ball_body_handle = rigid_body_set.insert(ball);
     collider_set.insert_with_parent(collider, ball_body_handle, &mut rigid_body_set);
@@ -178,10 +184,9 @@ async fn main() {
     let physics_hooks = ();
     let event_handler = ();
     let mut game = Game::new();
+    // println!("Width: {} | Height: {}", screen_width(), screen_height());
     loop {
         game.update();
-        game.draw();
-        next_frame().await;
         physics_pipeline.step(
             &gravity,
             &integration_parameters,
@@ -198,11 +203,13 @@ async fn main() {
             &event_handler,
         );
 
+        // Drawing ball
         let ball_body = &rigid_body_set[ball_body_handle];
-        println!(
-            "Ball position ({}, {})",
-            ball_body.translation().x,
-            ball_body.translation().y
-        );
+        let (ball_x, ball_y) =
+            Game::transform(ball_body.translation().x, ball_body.translation().y);
+        println!("Ball position ({}, {})", ball_x, ball_y);
+        game.draw();
+        draw_circle(ball_x, ball_y, radius * PIXELS_PER_METER, GRAY);
+        next_frame().await;
     }
 }
