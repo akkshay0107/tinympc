@@ -48,6 +48,10 @@ impl Game {
         }
 
         self.path_input.update();
+
+        // Upward accln and slight right turn
+        let (x,y, angle, thrust) = self.rocket.get_state();
+        self.rocket.set_state(x, y-thrust, angle+0.01, thrust+0.01);
     }
 
     fn draw_space_atmos(&self) {
@@ -123,11 +127,13 @@ impl Game {
 
         // Draw rocket
         self.rocket.draw();
-        self.path_input.draw();
+
+        // commented out for now
+        // self.path_input.draw();
     }
 }
 
-#[macroquad::main("Scene Testing")]
+#[macroquad::main("Game")]
 async fn main() {
     let mut game = Game::new();
     loop {

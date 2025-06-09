@@ -3,7 +3,8 @@
 //! Stores the history of the mouse's path and draws a line following it
 //! Only allows for one stroke (since the rocket's path should only be one
 //! continuous line) and limits the length of the path (equivalent to fuel
-//! on a rocket)
+//! on a rocket). Uses spline interpolation to smooth out the path drawn
+//! by the mouse.
 
 use macroquad::prelude::*;
 
