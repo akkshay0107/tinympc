@@ -41,6 +41,9 @@ impl PathDrawer {
         }
     }
 
+    /// Function to update fuel and history of points stored, by tracking mouse
+    /// movement and whether stroke is complete. Also dispatches path smoothing
+    /// after stroke is complete.
     pub fn update(&mut self) {
         if self.stroke_complete {
             if !self.fix_applied {
@@ -86,6 +89,8 @@ impl PathDrawer {
         }
     }
 
+    /// Draws the path stored in points vector onto the screen.
+    /// Also draws fuel gauge as a bar in the bottom right corner.
     pub fn draw(&self) {
         // Mouse path approximated as multiple small straight lines joined
         if self.points.len() > 1 {
@@ -128,6 +133,9 @@ impl PathDrawer {
         draw_rectangle_lines(gauge_x, gauge_y, gauge_width, gauge_height, 2.0, WHITE);
     }
 
+    /// Function to smooth out mouse path using spline interpolation.
+    /// Also makes sure that path is valid by deleting sections of path
+    /// that travel underground
     fn fix_path(&mut self) {
         // Prevent rocket path from clipping into the ground
         let y_limit = (screen_height() * 0.8) - (ROCKET_HEIGHT / 2.0);
@@ -138,7 +146,6 @@ impl PathDrawer {
             self.points.truncate(clip_index);
         }
 
-        // Iron out wiggles from mouse movement with Catmull-Rom spline
         const STEPS: usize = 5;
         // 4 points needed for spline interpolation
         if self.points.len() >= 4 {
@@ -156,6 +163,7 @@ impl PathDrawer {
         }
     }
 
+    /// Function to generate a point as per the Catmull-Rom spline algorithm
     fn catmull_rom_point(control_points: &[Vec2], t: f32) -> Vec2 {
         let [p0, p1, p2, p3] = [
             control_points[0],

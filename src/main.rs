@@ -96,6 +96,13 @@ impl Game {
         }
     }
 
+    /// Function to transform coordinates from the physics engine (real life)
+    /// to in game coordinates, in order to display it correctly
+    fn transform() {
+        // TODO - create a coordinate transform from physics in real life to
+        // in game pixels (in game y increases as ball falls down, flip gravity maybe)
+    }
+
     fn draw(&self) {
         // Draw the space background
         self.draw_space_atmos();
@@ -198,6 +205,4 @@ async fn main() {
             ball_body.translation().y
         );
     }
-    // TODO - create a coordinate transform from physics in real life to
-    // in game pixels (in game y increases as ball falls down, flip gravity maybe)
 }
