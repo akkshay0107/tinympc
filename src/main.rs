@@ -1,4 +1,5 @@
 use macroquad::prelude::*;
+use rapier2d::prelude::*;
 use tinympc::path_drawer::PathDrawer;
 use tinympc::rocket::*;
 
@@ -50,8 +51,9 @@ impl Game {
         self.path_input.update();
 
         // Upward accln and slight right turn
-        let (x,y, angle, thrust) = self.rocket.get_state();
-        self.rocket.set_state(x, y-thrust, angle+0.01, thrust+0.01);
+        let (x, y, angle, thrust) = self.rocket.get_state();
+        self.rocket
+            .set_state(x, y - thrust, angle + 0.01, thrust + 0.01);
     }
 
     fn draw_space_atmos(&self) {
@@ -125,20 +127,77 @@ impl Game {
             GROUND_INTERIOR_COLOR,
         );
 
-        // Draw rocket
-        self.rocket.draw();
-
         // commented out for now
+        // self.rocket.draw();
+        //
         // self.path_input.draw();
     }
 }
 
 #[macroquad::main("Game")]
 async fn main() {
+    let mut rigid_body_set = RigidBodySet::new();
+    let mut collider_set = ColliderSet::new();
+
+    // Rigid body for the ground
+    let ground = RigidBodyBuilder::fixed()
+        .translation(vector![0.0, 0.1])
+        .build();
+    let ground_handle = rigid_body_set.insert(ground);
+    let collider = ColliderBuilder::cuboid(100.0, 0.1).restitution(0.5).build();
+    collider_set.insert_with_parent(collider, ground_handle, &mut rigid_body_set);
+
+    // Rigid body for the ball
+    let ball = RigidBodyBuilder::dynamic()
+        .translation(vector![0.0, 10.0])
+        .build();
+    let radius = 0.5;
+    let collider = ColliderBuilder::ball(radius).restitution(0.5).build();
+    let ball_body_handle = rigid_body_set.insert(ball);
+    collider_set.insert_with_parent(collider, ball_body_handle, &mut rigid_body_set);
+
+    // Rapier intro code
+    /* Create other structures necessary for the simulation. */
+    let gravity = vector![0.0, -9.81];
+    let integration_parameters = IntegrationParameters::default();
+    let mut physics_pipeline = PhysicsPipeline::new();
+    let mut island_manager = IslandManager::new();
+    let mut broad_phase = DefaultBroadPhase::new();
+    let mut narrow_phase = NarrowPhase::new();
+    let mut impulse_joint_set = ImpulseJointSet::new();
+    let mut multibody_joint_set = MultibodyJointSet::new();
+    let mut ccd_solver = CCDSolver::new();
+    let mut query_pipeline = QueryPipeline::new();
+    let physics_hooks = ();
+    let event_handler = ();
     let mut game = Game::new();
     loop {
         game.update();
         game.draw();
-        next_frame().await
+        next_frame().await;
+        physics_pipeline.step(
+            &gravity,
+            &integration_parameters,
+            &mut island_manager,
+            &mut broad_phase,
+            &mut narrow_phase,
+            &mut rigid_body_set,
+            &mut collider_set,
+            &mut impulse_joint_set,
+            &mut multibody_joint_set,
+            &mut ccd_solver,
+            Some(&mut query_pipeline),
+            &physics_hooks,
+            &event_handler,
+        );
+
+        let ball_body = &rigid_body_set[ball_body_handle];
+        println!(
+            "Ball position ({}, {})",
+            ball_body.translation().x,
+            ball_body.translation().y
+        );
     }
+    // TODO - create a coordinate transform from physics in real life to
+    // in game pixels (in game y increases as ball falls down, flip gravity maybe)
 }
