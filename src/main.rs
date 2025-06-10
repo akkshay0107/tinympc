@@ -50,11 +50,6 @@ impl Game {
         }
 
         self.path_input.update();
-
-        // Upward accln and slight right turn
-        let (x, y, angle, thrust) = self.rocket.get_state();
-        self.rocket
-            .set_state(x, y - thrust, angle + 0.01, thrust + 0.01);
     }
 
     fn draw_space_atmos(&self) {
@@ -141,8 +136,6 @@ impl Game {
         );
 
         // commented out for now
-        // self.rocket.draw();
-        //
         // self.path_input.draw();
     }
 }
@@ -160,17 +153,20 @@ async fn main() {
     let collider = ColliderBuilder::cuboid(50.0, 6.0).restitution(0.5).build();
     collider_set.insert_with_parent(collider, ground_handle, &mut rigid_body_set);
 
-    // Rigid body for the ball
-    let ball = RigidBodyBuilder::dynamic()
+    // Rigid body for the rocket
+    let rocket_body = RigidBodyBuilder::dynamic()
         .translation(vector![40.0, 40.0])
         .build();
-    let radius = 2.0;
-    let collider = ColliderBuilder::ball(radius).restitution(0.5).build();
-    let ball_body_handle = rigid_body_set.insert(ball);
-    collider_set.insert_with_parent(collider, ball_body_handle, &mut rigid_body_set);
+    let collider = ColliderBuilder::cuboid(
+        ROCKET_WIDTH / (2.0 * PIXELS_PER_METER),
+        ROCKET_HEIGHT / (2.0 * PIXELS_PER_METER),
+    )
+    .restitution(0.1)
+    .build();
+    let rocket_body_handle = rigid_body_set.insert(rocket_body);
+    collider_set.insert_with_parent(collider, rocket_body_handle, &mut rigid_body_set);
 
-    // Rapier intro code
-    /* Create other structures necessary for the simulation. */
+    // Create other structures necessary for the simulation.
     let gravity = vector![0.0, -9.81];
     let integration_parameters = IntegrationParameters::default();
     let mut physics_pipeline = PhysicsPipeline::new();
@@ -183,8 +179,8 @@ async fn main() {
     let mut query_pipeline = QueryPipeline::new();
     let physics_hooks = ();
     let event_handler = ();
+
     let mut game = Game::new();
-    // println!("Width: {} | Height: {}", screen_width(), screen_height());
     loop {
         game.update();
         physics_pipeline.step(
@@ -203,13 +199,15 @@ async fn main() {
             &event_handler,
         );
 
-        // Drawing ball
-        let ball_body = &rigid_body_set[ball_body_handle];
-        let (ball_x, ball_y) =
-            Game::transform(ball_body.translation().x, ball_body.translation().y);
-        println!("Ball position ({}, {})", ball_x, ball_y);
+        // pass state to the sprite manager
+        let rocket_body = rigid_body_set.get(rocket_body_handle).unwrap();
+        let (rocket_x, rocket_y) =
+            Game::transform(rocket_body.translation().x, rocket_body.translation().y);
+        let rocket_angle = rocket_body.rotation().angle();
+        game.rocket.set_state(rocket_x, rocket_y, rocket_angle, 0.0);
+
         game.draw();
-        draw_circle(ball_x, ball_y, radius * PIXELS_PER_METER, GRAY);
+        game.rocket.draw();
         next_frame().await;
     }
 }
