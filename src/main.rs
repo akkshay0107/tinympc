@@ -153,9 +153,10 @@ async fn main() {
     let collider = ColliderBuilder::cuboid(50.0, 6.0).restitution(0.5).build();
     collider_set.insert_with_parent(collider, ground_handle, &mut rigid_body_set);
 
-    // Rigid body for the rocket
+    // Rigid body for the rocket - added mass
     let rocket_body = RigidBodyBuilder::dynamic()
         .translation(vector![40.0, 40.0])
+        .additional_mass(20.0)
         .build();
     let collider = ColliderBuilder::cuboid(
         ROCKET_WIDTH / (2.0 * PIXELS_PER_METER),
@@ -183,6 +184,32 @@ async fn main() {
     let mut game = Game::new();
     loop {
         game.update();
+        // Rocket update
+        {
+            let rocket_body = rigid_body_set.get_mut(rocket_body_handle).unwrap();
+            let thrust = if is_key_down(KeyCode::Space) {
+                // Apply force in the direction the rocket is pointing
+                let thrust_force = 25.0;
+                let direction = Vector::new(
+                    -rocket_body.rotation().angle().sin(),
+                    rocket_body.rotation().angle().cos(),
+                );
+                let force = direction * thrust_force;
+                rocket_body.add_force(force, true);
+                1.0
+            } else {
+                0.0
+            };
+
+            // Pass state to the rocket sprite manager
+            let (rocket_x, rocket_y) =
+                Game::transform(rocket_body.translation().x, rocket_body.translation().y);
+            let rocket_angle = rocket_body.rotation().angle();
+            game.rocket
+                .set_state(rocket_x, rocket_y, rocket_angle, thrust);
+        }
+
+        // Step the physics simulation
         physics_pipeline.step(
             &gravity,
             &integration_parameters,
@@ -198,13 +225,6 @@ async fn main() {
             &physics_hooks,
             &event_handler,
         );
-
-        // pass state to the sprite manager
-        let rocket_body = rigid_body_set.get(rocket_body_handle).unwrap();
-        let (rocket_x, rocket_y) =
-            Game::transform(rocket_body.translation().x, rocket_body.translation().y);
-        let rocket_angle = rocket_body.rotation().angle();
-        game.rocket.set_state(rocket_x, rocket_y, rocket_angle, 0.0);
 
         game.draw();
         game.rocket.draw();
