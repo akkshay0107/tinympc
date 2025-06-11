@@ -11,7 +11,6 @@ const PIXELS_PER_METER: f32 = 10.0;
 
 struct Game {
     stars: Vec<(f32, f32, f32)>,
-    ground_height: f32,
     rocket: Rocket,
     path_input: PathDrawer,
 }
@@ -33,7 +32,6 @@ impl Game {
         let path_input = PathDrawer::new(rocket_x, ground_y - ROCKET_HEIGHT, tolerance_radius);
         Self {
             stars,
-            ground_height: ground_y,
             rocket,
             path_input,
         }
@@ -104,36 +102,55 @@ impl Game {
         (xx, yy)
     }
 
-    fn draw(&self) {
-        // Draw the space background
-        self.draw_space_atmos();
-
-        // Stars
-        for (x, y, radius) in &self.stars {
-            draw_circle(*x, *y, *radius, WHITE);
-        }
-
-        // Ground crust
+    fn draw_ground(&self) {
         let screen_w = screen_width();
         let screen_h = screen_height();
-        let ground_y = self.ground_height;
-
-        draw_rectangle(
-            0.0,
-            ground_y - GROUND_CRUST_THICKNESS,
-            screen_w,
-            GROUND_CRUST_THICKNESS,
-            GROUND_CRUST_COLOR,
-        );
-
-        // Ground interior
+        let ground_y = screen_h * 0.8;
+        
         draw_rectangle(
             0.0,
             ground_y,
             screen_w,
-            screen_h - ground_y,
-            GROUND_INTERIOR_COLOR,
+            GROUND_CRUST_THICKNESS,
+            GROUND_CRUST_COLOR,
         );
+        let base_color = GROUND_INTERIOR_COLOR;
+        
+        // Draw in texture in the interior of the ground
+        for y in ((ground_y + GROUND_CRUST_THICKNESS) as i32..screen_h as i32).step_by(4) {
+            for x in (0..screen_w as i32).step_by(4) {
+                // Simple noise function based on position
+                // Combines three different sine waves and a stable pattern
+                // to create a more complex noise pattern
+                let n1 = (x as f32 * 0.1).sin();
+                let n2 = (y as f32 * 0.07).cos();
+                let n3 = ((x as f32 * 0.05 + y as f32 * 0.05).sin() * 2.0).sin();
+                let noise = (n1 * 0.3 + n2 * 0.2 + n3 * 0.5).abs() * 0.03;
+                
+                let stable = ((x as i32 + y * 12345 as i32) % 100) as f32 / 600.0;
+                let noise = (noise + stable).min(0.06);
+                
+                let color = Color::new(
+                    (base_color.r - noise * 1.0).max(0.0),
+                    (base_color.g - noise * 0.7).max(0.0),
+                    (base_color.b - noise * 0.4).max(0.0),
+                    base_color.a,
+                );
+                
+                draw_rectangle(x as f32, y as f32, 4.0, 4.0, color);
+            }
+        }
+    }
+
+    fn draw(&self) {
+        self.draw_space_atmos();
+
+        // Draw stars
+        for (x, y, radius) in &self.stars {
+            draw_circle(*x, *y, *radius, WHITE);
+        }
+
+        self.draw_ground();
 
         // commented out for now
         // self.path_input.draw();
