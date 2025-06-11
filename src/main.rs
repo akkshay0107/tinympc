@@ -1,6 +1,5 @@
 use macroquad::prelude::*;
 use rapier2d::prelude::*;
-use tinympc::path_drawer::PathDrawer;
 use tinympc::rocket::*;
 
 const GROUND_CRUST_COLOR: Color = Color::new(0.4, 0.2, 0.1, 1.0); // Darker than interior
@@ -13,7 +12,6 @@ struct Game {
     stars: Vec<(f32, f32, f32)>,
     ground_height: f32,
     rocket: Rocket,
-    path_input: PathDrawer,
 }
 
 impl Game {
@@ -29,13 +27,10 @@ impl Game {
         let rocket_x = screen_width() / 2.0;
         let ground_y = screen_height() * 0.8;
         let rocket = Rocket::new(rocket_x, ground_y);
-        let tolerance_radius = 8.0;
-        let path_input = PathDrawer::new(rocket_x, ground_y - ROCKET_HEIGHT, tolerance_radius);
         Self {
             stars,
             ground_height: ground_y,
             rocket,
-            path_input,
         }
     }
 
@@ -48,8 +43,6 @@ impl Game {
                 star.1 = rand::gen_range(0.0, screen_height() * 0.5);
             }
         }
-
-        self.path_input.update();
     }
 
     fn draw_space_atmos(&self) {
@@ -120,7 +113,7 @@ impl Game {
 
         draw_rectangle(
             0.0,
-            ground_y - GROUND_CRUST_THICKNESS,
+            ground_y,
             screen_w,
             GROUND_CRUST_THICKNESS,
             GROUND_CRUST_COLOR,
@@ -129,21 +122,20 @@ impl Game {
         // Ground interior
         draw_rectangle(
             0.0,
-            ground_y,
+            ground_y + GROUND_CRUST_THICKNESS,
             screen_w,
-            screen_h - ground_y,
+            screen_h - ground_y - GROUND_CRUST_THICKNESS,
             GROUND_INTERIOR_COLOR,
         );
-
-        // commented out for now
-        // self.path_input.draw();
     }
 }
 
 #[macroquad::main("Game")]
 async fn main() {
+    // Initialize physics structures
     let mut rigid_body_set = RigidBodySet::new();
     let mut collider_set = ColliderSet::new();
+    let mut impulse_joint_set = ImpulseJointSet::new();
 
     // Rigid body for the ground
     let ground = RigidBodyBuilder::fixed()
@@ -153,19 +145,19 @@ async fn main() {
     let collider = ColliderBuilder::cuboid(50.0, 6.0).restitution(0.5).build();
     collider_set.insert_with_parent(collider, ground_handle, &mut rigid_body_set);
 
-    // Rigid body for the rocket - added mass
+    // Rocket body as a single cuboid
+    let body_width = ROCKET_WIDTH / PIXELS_PER_METER;
+    let body_height = ROCKET_HEIGHT / PIXELS_PER_METER;
+
     let rocket_body = RigidBodyBuilder::dynamic()
         .translation(vector![40.0, 40.0])
-        .additional_mass(20.0)
         .build();
-    let collider = ColliderBuilder::cuboid(
-        ROCKET_WIDTH / (2.0 * PIXELS_PER_METER),
-        ROCKET_HEIGHT / (2.0 * PIXELS_PER_METER),
-    )
-    .restitution(0.1)
-    .build();
     let rocket_body_handle = rigid_body_set.insert(rocket_body);
-    collider_set.insert_with_parent(collider, rocket_body_handle, &mut rigid_body_set);
+
+    let body_collider = ColliderBuilder::cuboid(body_width / 2.0, body_height / 2.0)
+        .restitution(0.1)
+        .build();
+    collider_set.insert_with_parent(body_collider, rocket_body_handle, &mut rigid_body_set);
 
     // Create other structures necessary for the simulation.
     let gravity = vector![0.0, -9.81];
@@ -174,7 +166,6 @@ async fn main() {
     let mut island_manager = IslandManager::new();
     let mut broad_phase = DefaultBroadPhase::new();
     let mut narrow_phase = NarrowPhase::new();
-    let mut impulse_joint_set = ImpulseJointSet::new();
     let mut multibody_joint_set = MultibodyJointSet::new();
     let mut ccd_solver = CCDSolver::new();
     let mut query_pipeline = QueryPipeline::new();
@@ -184,32 +175,14 @@ async fn main() {
     let mut game = Game::new();
     loop {
         game.update();
-        // Rocket update
-        {
-            let rocket_body = rigid_body_set.get_mut(rocket_body_handle).unwrap();
-            let thrust = if is_key_down(KeyCode::Space) {
-                // Apply force in the direction the rocket is pointing
-                let thrust_force = 25.0;
-                let direction = Vector::new(
-                    -rocket_body.rotation().angle().sin(),
-                    rocket_body.rotation().angle().cos(),
-                );
-                let force = direction * thrust_force;
-                rocket_body.add_force(force, true);
-                1.0
-            } else {
-                0.0
-            };
+        // Pass state of rocket body to the rocket sprite manager
+        let rocket_body = rigid_body_set.get(rocket_body_handle).unwrap();
+        let (rocket_x, rocket_y) =
+            Game::transform(rocket_body.translation().x, rocket_body.translation().y);
+        let rocket_angle = rocket_body.rotation().angle();
+        game.rocket.set_state(rocket_x, rocket_y, rocket_angle, 0.0);
 
-            // Pass state to the rocket sprite manager
-            let (rocket_x, rocket_y) =
-                Game::transform(rocket_body.translation().x, rocket_body.translation().y);
-            let rocket_angle = rocket_body.rotation().angle();
-            game.rocket
-                .set_state(rocket_x, rocket_y, rocket_angle, thrust);
-        }
-
-        // Step the physics simulation
+        // Update state of objects in the physics engine
         physics_pipeline.step(
             &gravity,
             &integration_parameters,
