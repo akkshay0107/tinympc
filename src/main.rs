@@ -151,6 +151,7 @@ async fn main() {
 
     let rocket_body = RigidBodyBuilder::dynamic()
         .translation(vector![40.0, 40.0])
+        .rotation(0.2)
         .build();
     let rocket_body_handle = rigid_body_set.insert(rocket_body);
 

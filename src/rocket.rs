@@ -42,37 +42,72 @@ impl Rocket {
     pub fn draw(&self) {
         let half_width = ROCKET_WIDTH / 2.0;
         let half_height = ROCKET_HEIGHT / 2.0;
-
-        // Main body (central cuboid)
-        let top_left = Vec2::new(self.x - half_width, self.y - half_height);
-        draw_rectangle(top_left.x, top_left.y, ROCKET_WIDTH, ROCKET_HEIGHT, GRAY);
-
-        // Thrusters
         let thruster_width = ROCKET_WIDTH * THRUSTER_WIDTH_RATIO;
         let thruster_height = ROCKET_HEIGHT * THRUSTER_HEIGHT_RATIO;
 
-        let left_thruster_pos = Vec2::new(
-            self.x - half_width - thruster_width,
-            self.y + half_height - thruster_height,
-        );
+        let center = vec2(self.x, self.y);
 
-        draw_rectangle(
-            left_thruster_pos.x,
-            left_thruster_pos.y,
-            thruster_width,
-            thruster_height,
-            GRAY,
-        );
+        // Define all polygon vertices relative to center
+        let body_vertices = [
+            vec2(-half_width, -half_height),
+            vec2(half_width, -half_height),
+            vec2(half_width, half_height),
+            vec2(-half_width, half_height),
+        ];
 
-        let right_thruster_pos =
-            Vec2::new(self.x + half_width, self.y + half_height - thruster_height);
+        let left_thruster_vertices = [
+            vec2(-half_width - thruster_width, half_height - thruster_height),
+            vec2(-half_width, half_height - thruster_height),
+            vec2(-half_width, half_height),
+            vec2(-half_width - thruster_width, half_height),
+        ];
 
-        draw_rectangle(
-            right_thruster_pos.x,
-            right_thruster_pos.y,
-            thruster_width,
-            thruster_height,
-            GRAY,
-        );
+        let right_thruster_vertices = [
+            vec2(half_width, half_height - thruster_height),
+            vec2(half_width + thruster_width, half_height - thruster_height),
+            vec2(half_width + thruster_width, half_height),
+            vec2(half_width, half_height),
+        ];
+
+        self.draw_rotated_polygon(&body_vertices, center, GRAY);
+        self.draw_rotated_polygon(&left_thruster_vertices, center, GRAY);
+        self.draw_rotated_polygon(&right_thruster_vertices, center, GRAY);
+    }
+
+    fn draw_rotated_polygon(&self, vertices: &[Vec2], center: Vec2, color: Color) {
+        let cos_a = self.angle.cos();
+        let sin_a = self.angle.sin();
+
+        // Transform vertices to world coordinates
+        let transformed_vertices: Vec<Vec2> = vertices
+            .iter()
+            .map(|v| {
+                vec2(
+                    v.x * cos_a - v.y * sin_a + center.x,
+                    v.x * sin_a + v.y * cos_a + center.y,
+                )
+            })
+            .collect();
+
+        // Draw polygon outline
+        for i in 0..transformed_vertices.len() {
+            let current = transformed_vertices[i];
+            let next = transformed_vertices[(i + 1) % transformed_vertices.len()];
+            draw_line(current.x, current.y, next.x, next.y, 2.0, color);
+        }
+
+        // Fill polygon using triangle fan from first vertex
+        if transformed_vertices.len() >= 3 {
+            let first_vertex = transformed_vertices[0];
+
+            for i in 1..transformed_vertices.len() - 1 {
+                draw_triangle(
+                    first_vertex,
+                    transformed_vertices[i],
+                    transformed_vertices[i + 1],
+                    color,
+                );
+            }
+        }
     }
 }
