@@ -26,10 +26,7 @@ impl Game {
         let rocket_x = screen_width() / 2.0;
         let ground_y = screen_height() * 0.8;
         let rocket = Rocket::new(rocket_x, ground_y);
-        Self {
-            stars,
-            rocket,
-        }
+        Self { stars, rocket }
     }
 
     fn update(&mut self) {
@@ -99,7 +96,7 @@ impl Game {
         let screen_w = screen_width();
         let screen_h = screen_height();
         let ground_y = screen_h * 0.8;
-        
+
         draw_rectangle(
             0.0,
             ground_y,
@@ -108,7 +105,7 @@ impl Game {
             GROUND_CRUST_COLOR,
         );
         let base_color = GROUND_INTERIOR_COLOR;
-        
+
         // Draw in texture in the interior of the ground
         for y in ((ground_y + GROUND_CRUST_THICKNESS) as i32..screen_h as i32).step_by(4) {
             for x in (0..screen_w as i32).step_by(4) {
@@ -119,17 +116,17 @@ impl Game {
                 let n2 = (y as f32 * 0.07).cos();
                 let n3 = ((x as f32 * 0.05 + y as f32 * 0.05).sin() * 2.0).sin();
                 let noise = (n1 * 0.3 + n2 * 0.2 + n3 * 0.5).abs() * 0.03;
-                
+
                 let stable = ((x as i32 + y * 12345 as i32) % 100) as f32 / 600.0;
                 let noise = (noise + stable).min(0.06);
-                
+
                 let color = Color::new(
                     (base_color.r - noise * 1.0).max(0.0),
                     (base_color.g - noise * 0.7).max(0.0),
                     (base_color.b - noise * 0.4).max(0.0),
                     base_color.a,
                 );
-                
+
                 draw_rectangle(x as f32, y as f32, 4.0, 4.0, color);
             }
         }
@@ -168,7 +165,6 @@ async fn main() {
 
     let rocket_body = RigidBodyBuilder::dynamic()
         .translation(vector![40.0, 40.0])
-        .rotation(0.2)
         .build();
     let rocket_body_handle = rigid_body_set.insert(rocket_body);
 
@@ -193,14 +189,68 @@ async fn main() {
     let mut game = Game::new();
     loop {
         game.update();
+        let left_thruster = if is_key_down(KeyCode::Left) { 1.0 } else { 0.0 };
+        let right_thruster = if is_key_down(KeyCode::Right) {
+            1.0
+        } else {
+            0.0
+        };
+
+        let rocket_body = &mut rigid_body_set[rocket_body_handle];
+        let body_angle = rocket_body.rotation().angle();
+        const THRUST_FORCE: f32 = 0.1;
+
+        let left_thruster_offset = vector![
+            -ROCKET_WIDTH / PIXELS_PER_METER / 2.0,
+            ROCKET_HEIGHT / PIXELS_PER_METER / 2.0
+        ];
+        let right_thruster_offset = vector![
+            ROCKET_WIDTH / PIXELS_PER_METER / 2.0,
+            ROCKET_HEIGHT / PIXELS_PER_METER / 2.0
+        ];
+        let mut torque = 0.0;
+        let force = vector![0.0, THRUST_FORCE];
+
+        if left_thruster != 0.0 {
+            let rxf = left_thruster_offset.x * force.y - left_thruster_offset.y * force.x;
+            torque += rxf;
+        }
+
+        if right_thruster != 0.0 {
+            let rxf = right_thruster_offset.x * force.y - right_thruster_offset.y * force.x;
+            torque += rxf;
+        }
+
+        if left_thruster + right_thruster != 0.0 {
+            // Net F = R_{-body_angle} dot F_body
+            // Minus since opposite angle conventions
+            let net_force = vector![
+                force.y * (left_thruster + right_thruster) * body_angle.sin(),
+                force.y * (left_thruster + right_thruster) * body_angle.cos()
+            ];
+            rocket_body.add_force(net_force, true);
+        }
+
+        if torque != 0.0 {
+            // Minus added since clockwise taken as positive angle
+            // which is opposite of physical convention
+            rocket_body.add_torque(-torque, true);
+        }
+
+        println!("sin: {} / cos: {}", body_angle.sin(), body_angle.cos());
+
         // Pass state of rocket body to the rocket sprite manager
         let rocket_body = rigid_body_set.get(rocket_body_handle).unwrap();
         let (rocket_x, rocket_y) =
             Game::transform(rocket_body.translation().x, rocket_body.translation().y);
         let rocket_angle = rocket_body.rotation().angle();
-        game.rocket.set_state(rocket_x, rocket_y, rocket_angle, 0.0);
+        game.rocket.set_state(
+            rocket_x,
+            rocket_y,
+            rocket_angle,
+            (left_thruster, right_thruster),
+        );
 
-        // Update state of objects in the physics engine
         physics_pipeline.step(
             &gravity,
             &integration_parameters,

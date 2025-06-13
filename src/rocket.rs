@@ -15,7 +15,8 @@ pub struct Rocket {
     x: f32,
     y: f32,
     angle: f32,  // angle from vertical (radians)
-    thrust: f32, // thrust (normalized)
+    left_thruster: f32,  // left thruster power (normalized)
+    right_thruster: f32, // right thruster power (normalized)
 }
 
 impl Rocket {
@@ -24,19 +25,30 @@ impl Rocket {
             x,
             y,
             angle: 0.0,
-            thrust: 0.0,
+            left_thruster: 0.0,
+            right_thruster: 0.0,
         }
     }
 
-    pub fn get_state(&self) -> (f32, f32, f32, f32) {
-        (self.x, self.y, self.angle, self.thrust)
+    pub fn get_state(&self) -> (f32, f32, f32, (f32, f32)) {
+        (self.x, self.y, self.angle, (self.left_thruster, self.right_thruster))
     }
 
-    pub fn set_state(&mut self, x: f32, y: f32, angle: f32, thrust: f32) {
+    pub fn set_state(&mut self, x: f32, y: f32, angle: f32, thrust: (f32, f32)) {
         self.x = x;
         self.y = y;
         self.angle = angle;
-        self.thrust = thrust.min(1.0);
+        self.left_thruster = thrust.0.min(1.0);
+        self.right_thruster = thrust.1.min(1.0);
+    }
+    
+    pub fn set_thruster(&mut self, left: Option<f32>, right: Option<f32>) {
+        if let Some(power) = left {
+            self.left_thruster = power.min(1.0);
+        }
+        if let Some(power) = right {
+            self.right_thruster = power.min(1.0);
+        }
     }
 
     pub fn draw(&self) {
