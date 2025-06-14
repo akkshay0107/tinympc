@@ -1,17 +1,17 @@
 //! A 2D physics simulation world controlling the rocket
-//! 
+//!
 //! This module contains the physics simulation world for the rocket landing scenario
 //! Contains the physical rocket body and the ground, and has methods to apply forces
 //! to the rocket body using the thrusters
 
-
-use rapier2d::prelude::*;
 use macroquad::prelude::*;
+use rapier2d::prelude::*;
 
 const PIXELS_PER_METER: f32 = 10.0;
 const THRUST_FORCE: f32 = 0.1;
 const GROUND_RESTITUTION: f32 = 0.5;
 const ROCKET_RESTITUTION: f32 = 0.1;
+const ROCKET_MASS: f32 = 1.0;
 const GROUND_SIZE: Vector<f32> = vector![50.0, 6.0];
 
 pub const ROCKET_WIDTH: f32 = 20.0;
@@ -39,10 +39,15 @@ impl World {
         let mut collider_set = ColliderSet::new();
 
         let ground_position = vector![50.0, -6.0];
-        let ground_handle = Self::create_ground(&mut rigid_body_set, &mut collider_set, ground_position);
-        
+        let ground_handle =
+            Self::create_ground(&mut rigid_body_set, &mut collider_set, ground_position);
+
         let rocket_start_position = vector![40.0, 40.0];
-        let rocket_body_handle = Self::create_rocket(&mut rigid_body_set, &mut collider_set, rocket_start_position);
+        let rocket_body_handle = Self::create_rocket(
+            &mut rigid_body_set,
+            &mut collider_set,
+            rocket_start_position,
+        );
 
         Self {
             rigid_body_set,
@@ -66,37 +71,34 @@ impl World {
         collider_set: &mut ColliderSet,
         position: Vector<f32>,
     ) -> RigidBodyHandle {
-        let ground = RigidBodyBuilder::fixed()
-            .translation(position)
-            .build();
+        let ground = RigidBodyBuilder::fixed().translation(position).build();
         let ground_handle = rigid_body_set.insert(ground);
-        
+
         let collider = ColliderBuilder::cuboid(GROUND_SIZE.x, GROUND_SIZE.y)
             .restitution(GROUND_RESTITUTION)
             .build();
         collider_set.insert_with_parent(collider, ground_handle, rigid_body_set);
-        
+
         ground_handle
     }
 
-fn create_rocket(
+    fn create_rocket(
         rigid_body_set: &mut RigidBodySet,
         collider_set: &mut ColliderSet,
         position: Vector<f32>,
     ) -> RigidBodyHandle {
-        let rocket_body = RigidBodyBuilder::dynamic()
-            .translation(position)
-            .build();
+        let rocket_body = RigidBodyBuilder::dynamic().translation(position).build();
         let rocket_handle = rigid_body_set.insert(rocket_body);
-        
+
         let half_width = ROCKET_WIDTH / PIXELS_PER_METER / 2.0;
         let half_height = ROCKET_HEIGHT / PIXELS_PER_METER / 2.0;
-        
+
         let body_collider = ColliderBuilder::cuboid(half_width, half_height)
             .restitution(ROCKET_RESTITUTION)
+            .mass(ROCKET_MASS)
             .build();
         collider_set.insert_with_parent(body_collider, rocket_handle, rigid_body_set);
-        
+
         rocket_handle
     }
 
@@ -125,10 +127,10 @@ fn create_rocket(
 
         let rocket_body = &mut self.rigid_body_set[self.rocket_body_handle];
         let body_angle = rocket_body.rotation().angle();
-        
+
         let half_width = ROCKET_WIDTH / PIXELS_PER_METER / 2.0;
         let half_height = ROCKET_HEIGHT / PIXELS_PER_METER / 2.0;
-        
+
         let left_thruster_offset = vector![-half_width, half_height];
         let right_thruster_offset = vector![half_width, half_height];
         let thrust_vector = vector![0.0, THRUST_FORCE];
@@ -145,6 +147,8 @@ fn create_rocket(
 
         let total_thrust = left_thruster + right_thruster;
         if total_thrust != 0.0 {
+            // Result from multiplying rotation matrix of the body angle
+            // with the upward force in the frame of the rocket
             let net_force = vector![
                 thrust_vector.y * total_thrust * body_angle.sin(),
                 thrust_vector.y * total_thrust * body_angle.cos()
@@ -153,11 +157,14 @@ fn create_rocket(
         }
 
         if total_torque != 0.0 {
+            // Minus sign as angle measured clockwise in rapier
+            // which is opposite of the convention used for torque calculation
             rocket_body.add_torque(-total_torque, true);
         }
     }
 
     fn calculate_torque(offset: Vector<f32>, force: Vector<f32>) -> f32 {
+        // Cross product in 2d (torque = r cross F)
         offset.x * force.y - offset.y * force.x
     }
 
