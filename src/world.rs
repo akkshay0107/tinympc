@@ -12,9 +12,7 @@ const PIXELS_PER_METER: f32 = 10.0;
 const THRUST_FORCE: f32 = 0.1;
 const GROUND_RESTITUTION: f32 = 0.5;
 const ROCKET_RESTITUTION: f32 = 0.1;
-const GROUND_POSITION: Vector<f32> = vector![50.0, -6.0];
 const GROUND_SIZE: Vector<f32> = vector![50.0, 6.0];
-const ROCKET_START_POSITION: Vector<f32> = vector![40.0, 40.0];
 
 pub const ROCKET_WIDTH: f32 = 20.0;
 pub const ROCKET_HEIGHT: f32 = 40.0;
@@ -40,11 +38,11 @@ impl World {
         let mut rigid_body_set = RigidBodySet::new();
         let mut collider_set = ColliderSet::new();
 
-        let ground_handle = Self::create_ground(&mut rigid_body_set);
-        Self::create_ground_collider(&mut collider_set, ground_handle, &mut rigid_body_set);
-
-        let rocket_body_handle = Self::create_rocket(&mut rigid_body_set);
-        Self::create_rocket_collider(&mut collider_set, rocket_body_handle, &mut rigid_body_set);
+        let ground_position = vector![50.0, -6.0];
+        let ground_handle = Self::create_ground(&mut rigid_body_set, &mut collider_set, ground_position);
+        
+        let rocket_start_position = vector![40.0, 40.0];
+        let rocket_body_handle = Self::create_rocket(&mut rigid_body_set, &mut collider_set, rocket_start_position);
 
         Self {
             rigid_body_set,
@@ -63,43 +61,43 @@ impl World {
         }
     }
 
-    fn create_ground(rigid_body_set: &mut RigidBodySet) -> RigidBodyHandle {
-        let ground = RigidBodyBuilder::fixed()
-            .translation(GROUND_POSITION)
-            .build();
-        rigid_body_set.insert(ground)
-    }
-
-    fn create_ground_collider(
-        collider_set: &mut ColliderSet,
-        ground_handle: RigidBodyHandle,
+    fn create_ground(
         rigid_body_set: &mut RigidBodySet,
-    ) {
+        collider_set: &mut ColliderSet,
+        position: Vector<f32>,
+    ) -> RigidBodyHandle {
+        let ground = RigidBodyBuilder::fixed()
+            .translation(position)
+            .build();
+        let ground_handle = rigid_body_set.insert(ground);
+        
         let collider = ColliderBuilder::cuboid(GROUND_SIZE.x, GROUND_SIZE.y)
             .restitution(GROUND_RESTITUTION)
             .build();
         collider_set.insert_with_parent(collider, ground_handle, rigid_body_set);
+        
+        ground_handle
     }
 
-    fn create_rocket(rigid_body_set: &mut RigidBodySet) -> RigidBodyHandle {
-        let rocket_body = RigidBodyBuilder::dynamic()
-            .translation(ROCKET_START_POSITION)
-            .build();
-        rigid_body_set.insert(rocket_body)
-    }
-
-    fn create_rocket_collider(
-        collider_set: &mut ColliderSet,
-        rocket_body_handle: RigidBodyHandle,
+fn create_rocket(
         rigid_body_set: &mut RigidBodySet,
-    ) {
+        collider_set: &mut ColliderSet,
+        position: Vector<f32>,
+    ) -> RigidBodyHandle {
+        let rocket_body = RigidBodyBuilder::dynamic()
+            .translation(position)
+            .build();
+        let rocket_handle = rigid_body_set.insert(rocket_body);
+        
         let half_width = ROCKET_WIDTH / PIXELS_PER_METER / 2.0;
         let half_height = ROCKET_HEIGHT / PIXELS_PER_METER / 2.0;
         
         let body_collider = ColliderBuilder::cuboid(half_width, half_height)
             .restitution(ROCKET_RESTITUTION)
             .build();
-        collider_set.insert_with_parent(body_collider, rocket_body_handle, rigid_body_set);
+        collider_set.insert_with_parent(body_collider, rocket_handle, rigid_body_set);
+        
+        rocket_handle
     }
 
     pub fn step(&mut self) {
