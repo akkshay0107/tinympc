@@ -1,3 +1,10 @@
+//! A 2D physics simulation world controlling the rocket
+//! 
+//! This module contains the physics simulation world for the rocket landing scenario
+//! Contains the physical rocket body and the ground, and has methods to apply forces
+//! to the rocket body using the thrusters
+
+
 use rapier2d::prelude::*;
 use macroquad::prelude::*;
 
