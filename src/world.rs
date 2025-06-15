@@ -39,7 +39,7 @@ impl World {
         let mut collider_set = ColliderSet::new();
 
         let ground_position = vector![50.0, -6.0];
-        let ground_handle =
+        let _ground_handle =
             Self::create_ground(&mut rigid_body_set, &mut collider_set, ground_position);
 
         let rocket_start_position = vector![40.0, 40.0];
