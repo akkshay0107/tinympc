@@ -13,6 +13,7 @@ const GROUND_RESTITUTION: f32 = 0.5;
 const ROCKET_RESTITUTION: f32 = 0.1;
 const ROCKET_MASS: f32 = 1.0;
 const GROUND_SIZE: Vector<f32> = vector![50.0, 6.0];
+const DRAG_COEFFICIENT: f32 = 0.1;
 
 pub const ROCKET_WIDTH: f32 = 20.0;
 pub const ROCKET_HEIGHT: f32 = 40.0;
@@ -87,7 +88,11 @@ impl World {
         collider_set: &mut ColliderSet,
         position: Vector<f32>,
     ) -> RigidBodyHandle {
-        let rocket_body = RigidBodyBuilder::dynamic().translation(position).build();
+        let rocket_body = RigidBodyBuilder::dynamic()
+            .translation(position)
+            .linear_damping(DRAG_COEFFICIENT)
+            .angular_damping(DRAG_COEFFICIENT)
+            .build();
         let rocket_handle = rigid_body_set.insert(rocket_body);
 
         let half_width = ROCKET_WIDTH / PIXELS_PER_METER / 2.0;
