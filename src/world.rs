@@ -189,9 +189,16 @@ impl Default for World {
     }
 }
 
-pub fn transform(x: f32, y: f32) -> (f32, f32) {
+pub fn world_to_pixel(x: f32, y: f32) -> (f32, f32) {
     let ground_y = screen_height() * 0.8;
     let screen_x = x * PIXELS_PER_METER;
     let screen_y = ground_y - y * PIXELS_PER_METER;
     (screen_x, screen_y)
+}
+
+pub fn pixel_to_world(screen_x: f32, screen_y: f32) -> (f32, f32) {
+    let ground_y = screen_height() * 0.8;
+    let world_x = screen_x / PIXELS_PER_METER;
+    let world_y = (ground_y - screen_y) / PIXELS_PER_METER;
+    (world_x, world_y)
 }
