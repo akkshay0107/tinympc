@@ -1,11 +1,16 @@
 use macroquad::prelude::*;
+use rapier2d::prelude::*;
 use tinympc::rocket::*;
-use tinympc::world::{World, transform};
+use tinympc::world::{World, world_to_pixel, pixel_to_world};
 
 const GROUND_CRUST_COLOR: Color = Color::new(0.4, 0.2, 0.1, 1.0); // Darker than interior
 const GROUND_INTERIOR_COLOR: Color = Color::new(0.6, 0.4, 0.2, 1.0); // Tan color
 const GROUND_CRUST_THICKNESS: f32 = 10.0;
 const PARALLAX_SCROLL_SPEED: f32 = 0.08;
+
+const DRAG_POINTER_COLOR: Color = Color::new(1.0, 1.0, 0.0, 1.0);
+const DRAG_POINTER_RADIUS: f32 = 4.0;
+
 struct Game {
     stars: Vec<(f32, f32, f32)>,
     rocket: Rocket,
@@ -136,17 +141,37 @@ impl Game {
 async fn main() {
     let mut world = World::new();
     let mut game = Game::new();
+
     loop {
         game.update();
-        let left_thruster = if is_key_down(KeyCode::Left) { 1.0 } else { 0.0 };
-        let right_thruster = if is_key_down(KeyCode::Right) { 1.0 } else { 0.0 };
+        
+        // Mouse drag handling
+        let (mouse_x, mouse_y) = mouse_position();
+        let (world_mouse_x, world_mouse_y) = pixel_to_world(mouse_x, mouse_y);
+        let mouse_world_pos = vector![world_mouse_x, world_mouse_y];
 
-        world.apply_thruster_forces(left_thruster, right_thruster);
+        if is_mouse_button_pressed(MouseButton::Left) {
+            world.start_drag(mouse_world_pos);
+        } else if is_mouse_button_down(MouseButton::Left) && world.is_dragging {
+            world.update_drag(mouse_world_pos);
+        } else if is_mouse_button_released(MouseButton::Left) && world.is_dragging {
+            world.end_drag();
+        }
+
+        // Deactivate keypress when dragging
+        let (left_thruster, right_thruster) = if !world.is_dragging {
+            let left = if is_key_down(KeyCode::Left) { 1.0 } else { 0.0 };
+            let right = if is_key_down(KeyCode::Right) { 1.0 } else { 0.0 };
+            world.apply_thruster_forces(left, right);
+            (left, right)
+        } else {
+            (0.0, 0.0)
+        };
         
         world.step();
 
         let (rocket_x, rocket_y, rocket_angle) = world.get_rocket_state();
-        let (px_rocket_x, px_rocket_y) = transform(rocket_x, rocket_y);
+        let (px_rocket_x, px_rocket_y) = world_to_pixel(rocket_x, rocket_y);
         
         game.rocket.set_state(
             px_rocket_x,
@@ -157,6 +182,12 @@ async fn main() {
 
         game.draw();
         game.rocket.draw();
+        
+        // Draw drag indicator when dragging
+        if world.is_dragging {
+            draw_circle(mouse_x, mouse_y, DRAG_POINTER_RADIUS, DRAG_POINTER_COLOR);
+        }
+        
         next_frame().await;
     }
 }
