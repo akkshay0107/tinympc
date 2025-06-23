@@ -173,16 +173,6 @@ async fn main() {
         } else if is_mouse_button_released(MouseButton::Left) && world.is_dragging {
             world.end_drag();
         }
-
-        // Deactivate keypress when dragging
-        let (left_thruster, right_thruster) = if !world.is_dragging {
-            let left = if is_key_down(KeyCode::Left) { 1.0 } else { 0.0 };
-            let right = if is_key_down(KeyCode::Right) { 1.0 } else { 0.0 };
-            world.apply_thruster_forces(left, right);
-            (left, right)
-        } else {
-            (0.0, 0.0)
-        };
         
         world.step();
 
@@ -193,7 +183,7 @@ async fn main() {
             px_rocket_x,
             px_rocket_y,
             rocket_angle,
-            (left_thruster, right_thruster),
+            (0.0, 0.0),
         );
 
         game.draw();

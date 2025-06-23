@@ -9,12 +9,13 @@ use macroquad::prelude::*;
 use rapier2d::prelude::*;
 
 const PIXELS_PER_METER: f32 = 10.0;
-const THRUST_FORCE: f32 = 0.1;
+
 const GROUND_RESTITUTION: f32 = 0.5;
 const ROCKET_RESTITUTION: f32 = 0.1;
 const ROCKET_MASS: f32 = 1.0;
 const GROUND_SIZE: Vector<f32> = vector![50.0, 6.0];
 const DRAG_COEFFICIENT: f32 = 0.1;
+const MAX_THRUST: f32 = 5.0;
 
 pub const ROCKET_WIDTH: f32 = 20.0;
 pub const ROCKET_HEIGHT: f32 = 40.0;
@@ -134,7 +135,10 @@ impl World {
         );
     }
 
-    pub fn apply_thruster_forces(&mut self, left_thruster: f32, right_thruster: f32) {
+    pub fn apply_thruster_forces(&mut self, left_thruster_input: f32, right_thruster_input: f32) {
+        let left_thruster = left_thruster_input.clamp(0.0, MAX_THRUST);
+        let right_thruster = right_thruster_input.clamp(0.0, MAX_THRUST);
+
         if left_thruster == 0.0 && right_thruster == 0.0 {
             return;
         }
@@ -142,37 +146,35 @@ impl World {
         let rocket_body = &mut self.rigid_body_set[self.rocket_body_handle];
         let body_angle = rocket_body.rotation().angle();
 
+        let total_thrust = left_thruster + right_thruster;
+        // Result from multiplying rotation matrix of the body angle
+        // with the upward force in the frame of the rocket
+        let net_force = vector![
+            total_thrust * body_angle.sin(),
+            total_thrust * body_angle.cos()
+        ];
+        // Equivalent to setting the force of the rocket body
+        rocket_body.reset_forces(true);
+        rocket_body.add_force(net_force, true);
+
+        let up = vector![0.0, 1.0];
         let half_width = ROCKET_WIDTH / PIXELS_PER_METER / 2.0;
         let half_height = ROCKET_HEIGHT / PIXELS_PER_METER / 2.0;
-
         let left_thruster_offset = vector![-half_width, half_height];
         let right_thruster_offset = vector![half_width, half_height];
-        let thrust_vector = vector![0.0, THRUST_FORCE];
 
         let mut total_torque = 0.0;
-
         if left_thruster != 0.0 {
-            total_torque += Self::calculate_torque(left_thruster_offset, thrust_vector);
+            total_torque += Self::calculate_torque(left_thruster_offset, left_thruster * up);
         }
-
         if right_thruster != 0.0 {
-            total_torque += Self::calculate_torque(right_thruster_offset, thrust_vector);
-        }
-
-        let total_thrust = left_thruster + right_thruster;
-        if total_thrust != 0.0 {
-            // Result from multiplying rotation matrix of the body angle
-            // with the upward force in the frame of the rocket
-            let net_force = vector![
-                thrust_vector.y * total_thrust * body_angle.sin(),
-                thrust_vector.y * total_thrust * body_angle.cos()
-            ];
-            rocket_body.add_force(net_force, true);
+            total_torque += Self::calculate_torque(right_thruster_offset, right_thruster * up);
         }
 
         if total_torque != 0.0 {
             // Minus sign as angle measured clockwise in rapier
             // which is opposite of the convention used for torque calculation
+            rocket_body.reset_torques(true);
             rocket_body.add_torque(-total_torque, true);
         }
     }
@@ -194,19 +196,22 @@ impl World {
     pub fn start_drag(&mut self, mouse_world_pos: Vector<f32>) -> bool {
         let rocket_body = &self.rigid_body_set[self.rocket_body_handle];
         let rocket_pos = rocket_body.translation();
-        
+
         let dx = mouse_world_pos.x - rocket_pos.x;
         let dy = mouse_world_pos.y - rocket_pos.y;
         let sq_dist = dx * dx + dy * dy;
-        
+
         // Only start drag if within tolerance limit
         if sq_dist < TOLERANCE_RADIUS * TOLERANCE_RADIUS {
             self.is_dragging = true;
             self.drag_start_pos = Some(rocket_pos.clone());
-            self.drag_anchor = Some(vector![mouse_world_pos.x - rocket_pos.x, mouse_world_pos.y - rocket_pos.y]);
+            self.drag_anchor = Some(vector![
+                mouse_world_pos.x - rocket_pos.x,
+                mouse_world_pos.y - rocket_pos.y
+            ]);
             return true;
         }
-        
+
         false
     }
 
@@ -218,11 +223,9 @@ impl World {
         if let Some(anchor) = &self.drag_anchor {
             if let Some(rocket_body) = self.rigid_body_set.get_mut(self.rocket_body_handle) {
                 // Calculate target position based on mouse position and anchor point
-                let target_pos = vector![
-                    mouse_world_pos.x - anchor.x,
-                    mouse_world_pos.y - anchor.y
-                ];
-                
+                let target_pos =
+                    vector![mouse_world_pos.x - anchor.x, mouse_world_pos.y - anchor.y];
+
                 let current_pos = rocket_body.translation();
                 let to_target = target_pos - current_pos;
 
@@ -231,10 +234,10 @@ impl World {
                 // coefficient should be slightly lower for the lag effect
                 let factor = 20.0;
                 let velocity = to_target * factor;
-                
+
                 rocket_body.set_linvel(velocity, true);
                 // Prevent rotation while dragging
-                rocket_body.set_angvel(0.0, true); 
+                rocket_body.set_angvel(0.0, true);
                 rocket_body.wake_up(true);
             }
         }
@@ -244,7 +247,7 @@ impl World {
         self.is_dragging = false;
         self.drag_start_pos = None;
         self.drag_anchor = None;
-        
+
         // Reset angular velocity when drag ends
         if let Some(rocket_body) = self.rigid_body_set.get_mut(self.rocket_body_handle) {
             rocket_body.set_angvel(0.0, true);
