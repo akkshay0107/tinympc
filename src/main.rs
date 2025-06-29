@@ -179,6 +179,12 @@ async fn main() {
         let (rocket_x, rocket_y, rocket_angle) = world.get_rocket_state();
         let (px_rocket_x, px_rocket_y) = world_to_pixel(rocket_x, rocket_y);
         
+        #[cfg(feature = "log_position")]
+        {
+            println!("Rocket position - World: ({:.2}, {:.2}), Screen: ({:.2}, {:.2})", 
+                    rocket_x, rocket_y, px_rocket_x, px_rocket_y);
+        }
+        
         game.rocket.set_state(
             px_rocket_x,
             px_rocket_y,
