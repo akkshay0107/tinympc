@@ -3,34 +3,34 @@ use serde::{Serialize, Deserialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Record {
     // Current state
-    pub current_pos_x: f64,
-    pub current_pos_y: f64,
-    pub current_vel_x: f64,
-    pub current_vel_y: f64,
-    pub current_angular_vel: f64,
+    pub current_pos_x: f32,
+    pub current_pos_y: f32,
+    pub current_vel_x: f32,
+    pub current_vel_y: f32,
+    pub current_angular_vel: f32,
 
     // Action
-    pub left_thruster: f64,
-    pub right_thruster: f64,
+    pub left_thruster: f32,
+    pub right_thruster: f32,
 
     // Resulting state
-    pub resulting_pos_x: f64,
-    pub resulting_pos_y: f64,
-    pub resulting_vel_x: f64,
-    pub resulting_vel_y: f64,
-    pub resulting_angular_vel: f64,
+    pub resulting_pos_x: f32,
+    pub resulting_pos_y: f32,
+    pub resulting_vel_x: f32,
+    pub resulting_vel_y: f32,
+    pub resulting_angular_vel: f32,
 }
 
 impl Record {
     pub fn new(
-        current_pos: (f64, f64),
-        current_vel: (f64, f64),
-        current_angular_vel: f64,
-        left_thruster: f64,
-        right_thruster: f64,
-        resulting_pos: (f64, f64),
-        resulting_vel: (f64, f64),
-        resulting_angular_vel: f64,
+        current_pos: (f32, f32),
+        current_vel: (f32, f32),
+        current_angular_vel: f32,
+        left_thruster: f32,
+        right_thruster: f32,
+        resulting_pos: (f32, f32),
+        resulting_vel: (f32, f32),
+        resulting_angular_vel: f32,
     ) -> Self {
         Self {
             current_pos_x: current_pos.0,
