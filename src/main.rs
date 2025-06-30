@@ -181,8 +181,15 @@ async fn main() {
         
         #[cfg(feature = "logging")]
         {
-            println!("Rocket position - World: ({:.2}, {:.2}), Screen: ({:.2}, {:.2})", 
+            let (vel_x, vel_y, ang_vel) = world.get_rocket_dynamics();
+            
+            println!("Rocket State:");
+            println!("  Position - World: ({:.2}, {:.2}), Screen: ({:.2}, {:.2})", 
                     rocket_x, rocket_y, px_rocket_x, px_rocket_y);
+            println!("  Velocity: ({:.2}, {:.2}), Speed: {:.2}", 
+                    vel_x, vel_y, (vel_x.powi(2) + vel_y.powi(2)).sqrt());
+            println!("  Angle: {:.2}, Angular Velocity: {:.2}", 
+                    rocket_angle, ang_vel);
         }
         
         game.rocket.set_state(

@@ -4,13 +4,12 @@ use rapier2d::prelude::*;
 use crate::record::Record;
 use crate::world::World;
 
-// TODO: fix velocity constants
 const NUM_SAMPLES: usize = 1000;
 const MIN_POS_X: f32 = 0.0;
 const MAX_POS_X: f32 = 100.0;
 const MIN_POS_Y: f32 = 2.0;
 const MAX_POS_Y: f32 = 45.0;
-const MAX_VELOCITY: f32 = 5.0;
+const MAX_VELOCITY: f32 = 30.0;
 const MAX_ANGULAR_VELOCITY: f32 = 2.0;
 
 fn generate_random_position() -> (f32, f32) {

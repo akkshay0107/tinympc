@@ -193,6 +193,13 @@ impl World {
         )
     }
 
+    pub fn get_rocket_dynamics(&self) -> (f32, f32, f32) {
+        let rocket_body = &self.rigid_body_set[self.rocket_body_handle];
+        let lin_vel = rocket_body.linvel();
+        let ang_vel = rocket_body.angvel();
+        (lin_vel.x, lin_vel.y, ang_vel)
+    }
+
     pub fn start_drag(&mut self, mouse_world_pos: Vector<f32>) -> bool {
         let rocket_body = &self.rigid_body_set[self.rocket_body_handle];
         let rocket_pos = rocket_body.translation();
