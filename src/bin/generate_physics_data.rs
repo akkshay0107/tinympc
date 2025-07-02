@@ -1,8 +1,7 @@
 use macroquad::prelude::*;
 use rapier2d::prelude::*;
-
-use crate::record::Record;
-use crate::world::World;
+use tinympc::record::Record;
+use tinympc::world::World;
 
 const NUM_SAMPLES: usize = 1000;
 const MIN_POS_X: f32 = 0.0;
@@ -24,7 +23,7 @@ fn generate_random_velocity() -> (f32, f32) {
     (vx, vy)
 }
 
-pub fn generate_physics_data(output_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn generate_physics_data(output_path: &str) -> Result<(), Box<dyn std::error::Error>> {
     rand::srand(macroquad::miniquad::date::now() as _);
     let mut records = Vec::with_capacity(NUM_SAMPLES);
     let mut world = World::new();
@@ -81,6 +80,15 @@ pub fn generate_physics_data(output_path: &str) -> Result<(), Box<dyn std::error
         NUM_SAMPLES, output_path
     );
 
+    Ok(())
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create data directory if it doesn't exist
+    std::fs::create_dir_all("data")?;
+    let output_path = "data/physics_data.csv";
+    generate_physics_data(output_path)?;
+    
     Ok(())
 }
 
