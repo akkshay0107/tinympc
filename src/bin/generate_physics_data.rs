@@ -35,8 +35,8 @@ fn generate_physics_data(output_path: &str) -> Result<(), Box<dyn std::error::Er
         let initial_pos = (pos_x, pos_y);
         let initial_vel = (vel_x, vel_y);
         let angular_vel = rand::gen_range(-MAX_ANGULAR_VELOCITY, MAX_ANGULAR_VELOCITY);
-        let left_thruster = rand::gen_range(0.0, 1.0);
-        let right_thruster = rand::gen_range(0.0, 1.0);
+        let left_thruster = rand::gen_range(0.0, 5.0);
+        let right_thruster = rand::gen_range(0.0, 5.0);
 
         let rocket_handle = world.rocket_body_handle;
         let rocket_body = world.rigid_body_set.get_mut(rocket_handle).unwrap();
@@ -88,7 +88,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all("data")?;
     let output_path = "data/physics_data.csv";
     generate_physics_data(output_path)?;
-    
+
     Ok(())
 }
 
