@@ -125,7 +125,9 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
 
             train_loss += loss.item() * X_batch.size(0)
 
-        train_loss /= len(train_loader.dataset)
+        # Forcibly suppressing pyright type checker since
+        # RocketDynamicsDataset implements __len__
+        train_loss /= len(train_loader.dataset) # type: ignore[arg]
 
         val_loss = 0.0
         model.eval()
@@ -135,7 +137,7 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
                 outputs = model(X_batch)
                 val_loss += loss_fn(outputs, y_batch).item() * X_batch.size(0)
 
-        val_loss /= len(val_loader.dataset)
+        val_loss /= len(val_loader.dataset) # type: ignore[arg]
 
         scheduler.step(val_loss)
 
@@ -185,7 +187,7 @@ def evaluate_model(model: nn.Module, test_loader: DataLoader) -> Dict[str, float
             outputs = model(X_batch)
             test_loss += loss_fn(outputs, y_batch).item() * X_batch.size(0)
 
-    test_loss /= len(test_loader.dataset)
+    test_loss /= len(test_loader.dataset) # type: ignore[arg]
 
     return {
         'mse': test_loss,
@@ -208,7 +210,7 @@ def main():
         'patience': 15,
         'test_size': 0.15,
         'val_size': 0.15,
-        'random_state': 42
+        'random_state': 1
     }
 
     (PROJECT_ROOT / 'models').mkdir(parents=True, exist_ok=True)
