@@ -1,0 +1,4 @@
+/target
+*.pdf
+*.csv
+training_config.json
