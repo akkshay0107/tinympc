@@ -250,7 +250,7 @@ def main():
 
     # Save config
     with open('training_config.json', 'w') as f:
-        json.dump(config, f, indent=2)
+        json.dump(config, f, indent=4)
 
     print("\nTraining completed successfully!")
     print(f"Best validation loss: {training_result['best_val_loss']:.6f}")

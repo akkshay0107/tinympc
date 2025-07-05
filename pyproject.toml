@@ -2,15 +2,13 @@
 name = "tinympc"
 version = "0.1.0"
 description = "Neural network based MPC controller for a rocket landing scenario"
-authors = [
-    {name = "Akkshay Sundara Rajan",email = "sundar57@purdue.edu"}
-]
+authors = [{ name = "Akkshay Sundara Rajan", email = "sundar57@purdue.edu" }]
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "numpy (>=2.3.1,<3.0.0)",
     "pandas (>=2.3.0,<3.0.0)",
-    "scikit-learn (>=1.7.0,<2.0.0)"
+    "scikit-learn (>=1.7.0,<2.0.0)",
 ]
 
 [tool.poetry]
