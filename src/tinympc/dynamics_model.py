@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+from datetime import datetime
+import os
 
 import numpy as np
 import pandas as pd
@@ -9,6 +11,8 @@ import torch.nn as nn
 import torch.optim as optim
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
+from torch.utils.tensorboard import SummaryWriter
+
 
 class RocketDynamicsDataset(Dataset):
     def __init__(self, X: torch.Tensor, y: torch.Tensor):
@@ -92,7 +96,8 @@ def load_data(data_path: str, test_size: float = 0.2, val_size: float = 0.1,
 
 def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader,
                num_epochs: int = 100, learning_rate: float = 1e-3,
-               patience: int = 10, model_save_path: Optional[str] = None) -> Dict:
+               patience: int = 10, model_save_path: Optional[str] = None,
+               log_dir: Optional[str] = None) -> Dict:
     # Only pytorch-cpu installed in project
     device = torch.device('cpu')
     model = model.to(device)
@@ -102,6 +107,14 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='min', factor=0.5, patience=5
     )
+
+    # TensorBoard setup
+    writer = None
+    if log_dir:
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        log_dir = os.path.join(log_dir, f'run_{timestamp}')
+        writer = SummaryWriter(log_dir=log_dir)
+        print(f'TensorBoard logs saved to: {log_dir}')
 
     # Training variables
     best_val_loss = float('inf')
@@ -146,6 +159,12 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
         history['val_loss'].append(val_loss)
         print(f'Epoch {epoch+1}/{num_epochs} - Train Loss: {train_loss:.6f}, Val Loss: {val_loss:.6f}')
 
+        # Log to TensorBoard
+        if writer:
+            writer.add_scalar('Loss/train', train_loss, epoch)
+            writer.add_scalar('Loss/validation', val_loss, epoch)
+            writer.add_scalar('Learning Rate', optimizer.param_groups[0]['lr'], epoch)
+
         # Save best model
         if val_loss < best_val_loss:
             best_val_loss = val_loss
@@ -164,12 +183,20 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
             patience_counter += 1
             if patience_counter >= patience:
                 print(f'Early stopping after {patience} epochs')
+                if writer:
+                    writer.add_text('Training', f'Early stopping after {patience} epochs')
                 break
+
+    if writer:
+        writer.flush()
+        writer.close()
+        print(f'Training metrics saved, run tensorboard --logdir={log_dir}')
 
     return {
         'history': history,
         'best_model_state': best_model_state,
-        'best_val_loss': best_val_loss
+        'best_val_loss': best_val_loss,
+        'log_dir': log_dir if log_dir else None,
     }
 
 
@@ -203,6 +230,7 @@ def main():
     config = {
         'data_path': str(PROJECT_ROOT / 'data' / 'physics_data.csv'),
         'model_save_path': str(PROJECT_ROOT / 'models' / 'dynamics_model.pth'),
+        'log_dir': str(PROJECT_ROOT / 'runs'),
         'batch_size': 128,
         'hidden_dims': [256, 256, 256],
         'learning_rate': 1e-3,
@@ -239,7 +267,8 @@ def main():
         num_epochs=config['num_epochs'],
         learning_rate=config['learning_rate'],
         patience=config['patience'],
-        model_save_path=config['model_save_path']
+        model_save_path=config['model_save_path'],
+        log_dir=config['log_dir']
     )
 
     # Load best model and evaluate on test set
