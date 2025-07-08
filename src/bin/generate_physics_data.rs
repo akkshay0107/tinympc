@@ -4,7 +4,7 @@ use rapier2d::na::UnitComplex;
 use tinympc::record::Record;
 use tinympc::world::World;
 
-const NUM_SAMPLES: usize = 50_000;
+const NUM_SAMPLES: usize = 200_000;
 const MIN_POS_X: f32 = 0.0;
 const MAX_POS_X: f32 = 100.0;
 const MIN_POS_Y: f32 = 2.0;

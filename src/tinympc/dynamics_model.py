@@ -27,16 +27,20 @@ class RocketDynamicsDataset(Dataset):
 
 
 class DynamicsModel(nn.Module):
-    def __init__(self, input_dim: int = 8, output_dim: int = 6, hidden_dims: List[int] = [64, 64, 64]):
+    def __init__(self, input_dim: int = 8, output_dim: int = 6, hidden_dims: List[int] = [64, 64, 64],
+                 dropout_rate: float = 0.1):
         super(DynamicsModel, self).__init__()
         layers = []
         prev_dim = input_dim
 
         # Simple relu feed forward
-        for hidden_dim in hidden_dims:
+        for i, hidden_dim in enumerate(hidden_dims):
             layers.append(nn.Linear(prev_dim, hidden_dim))
             layers.append(nn.ReLU())
             prev_dim = hidden_dim
+            if dropout_rate > 0 and i < len(hidden_dims) - 1:
+                layers.append(nn.Dropout(p=dropout_rate))
+        
         layers.append(nn.Linear(prev_dim, output_dim))
 
         self.network = nn.Sequential(*layers)
@@ -231,9 +235,10 @@ def main():
         'data_path': str(PROJECT_ROOT / 'data' / 'physics_data.csv'),
         'model_save_path': str(PROJECT_ROOT / 'models' / 'dynamics_model.pth'),
         'log_dir': str(PROJECT_ROOT / 'runs'),
-        'batch_size': 128,
-        'hidden_dims': [256, 256, 256],
+        'batch_size': 64,
+        'hidden_dims': [128, 128, 128],
         'learning_rate': 1e-3,
+        'dropout_rate': 0.0,
         'num_epochs': 100,
         'patience': 15,
         'test_size': 0.15,
@@ -256,7 +261,8 @@ def main():
     model = DynamicsModel(
         input_dim=8,  # 6 state + 2 action dimensions
         output_dim=6,  # 6 state dimensions
-        hidden_dims=config['hidden_dims']
+        hidden_dims=config['hidden_dims'],
+        dropout_rate=config['dropout_rate']
     )
 
     print("Training model...")
