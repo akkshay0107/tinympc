@@ -40,7 +40,7 @@ class DynamicsModel(nn.Module):
             prev_dim = hidden_dim
             if dropout_rate > 0 and i < len(hidden_dims) - 1:
                 layers.append(nn.Dropout(p=dropout_rate))
-        
+
         layers.append(nn.Linear(prev_dim, output_dim))
 
         self.network = nn.Sequential(*layers)
@@ -60,10 +60,10 @@ def load_data(data_path: str, test_size: float = 0.2, val_size: float = 0.1,
         'left_thruster', 'right_thruster'
     ]
 
-    # Output features ([S_(t+1)])
+    # Output features ([S_(t+1) - S_t])
     output_cols = [
-        'resulting_pos_x', 'resulting_pos_y', 'resulting_angle',
-        'resulting_vel_x', 'resulting_vel_y', 'resulting_angular_vel'
+        'delta_pos_x', 'delta_pos_y', 'delta_angle',
+        'delta_vel_x', 'delta_vel_y', 'delta_angular_vel'
     ]
 
     # Train test validation split
@@ -236,7 +236,7 @@ def main():
         'model_save_path': str(PROJECT_ROOT / 'models' / 'dynamics_model.pth'),
         'log_dir': str(PROJECT_ROOT / 'runs'),
         'batch_size': 64,
-        'hidden_dims': [128, 128, 128],
+        'hidden_dims': [256, 256, 256],
         'learning_rate': 1e-3,
         'dropout_rate': 0.0,
         'num_epochs': 100,
