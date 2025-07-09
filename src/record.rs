@@ -14,13 +14,13 @@ pub struct Record {
     pub left_thruster: f32,
     pub right_thruster: f32,
 
-    // Resulting state
-    pub resulting_pos_x: f32,
-    pub resulting_pos_y: f32,
-    pub resulting_angle: f32,
-    pub resulting_vel_x: f32,
-    pub resulting_vel_y: f32,
-    pub resulting_angular_vel: f32,
+    // Deltas from current to resulting state
+    pub delta_pos_x: f32,
+    pub delta_pos_y: f32,
+    pub delta_angle: f32,
+    pub delta_vel_x: f32,
+    pub delta_vel_y: f32,
+    pub delta_angular_vel: f32,
 }
 
 impl Record {
@@ -31,10 +31,10 @@ impl Record {
         current_angular_vel: f32,
         left_thruster: f32,
         right_thruster: f32,
-        resulting_pos: (f32, f32),
-        resulting_angle: f32,
-        resulting_vel: (f32, f32),
-        resulting_angular_vel: f32,
+        delta_pos: (f32, f32),
+        delta_angle: f32,
+        delta_vel: (f32, f32),
+        delta_angular_vel: f32,
     ) -> Self {
         Self {
             current_pos_x: current_pos.0,
@@ -45,12 +45,12 @@ impl Record {
             current_angular_vel,
             left_thruster,
             right_thruster,
-            resulting_pos_x: resulting_pos.0,
-            resulting_pos_y: resulting_pos.1,
-            resulting_angle,
-            resulting_vel_x: resulting_vel.0,
-            resulting_vel_y: resulting_vel.1,
-            resulting_angular_vel,
+            delta_pos_x: delta_pos.0,
+            delta_pos_y: delta_pos.1,
+            delta_angle,
+            delta_vel_x: delta_vel.0,
+            delta_vel_y: delta_vel.1,
+            delta_angular_vel,
         }
     }
 
@@ -73,15 +73,15 @@ mod tests {
     fn test_record_write_to_csv() {
         let record = Record::new(
             (1.0, 2.0),
-            0.1,  // current_angle
+            0.1,
             (0.1, 0.2),
             0.05,
             1.0,
             0.5,
-            (1.1, 2.05),
-            0.15, // resulting_angle
-            (0.11, 0.21),
-            0.04,
+            (0.1, 0.05),
+            0.05,
+            (0.01, 0.01),
+            -0.01,
         );
 
         let temp_path = "test_record.csv";
@@ -91,7 +91,7 @@ mod tests {
         fs::remove_file(temp_path).unwrap();
         
         // Check if the content contains the expected values (ignoring headers)
-        let expected_values = "1.0,2.0,0.1,0.1,0.2,0.05,1.0,0.5,1.1,2.05,0.15,0.11,0.21,0.04";
+        let expected_values = "1.0,2.0,0.1,0.1,0.2,0.05,1.0,0.5,0.1,0.05,0.05,0.01,0.01,-0.01";
         if !content.contains(expected_values) {
             panic!("Content does not contain expected values.\nExpected: {}\nActual: {}", expected_values, content);
         }

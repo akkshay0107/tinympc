@@ -13,7 +13,7 @@ const PIXELS_PER_METER: f32 = 10.0;
 const GROUND_RESTITUTION: f32 = 0.5;
 const ROCKET_RESTITUTION: f32 = 0.1;
 const ROCKET_MASS: f32 = 1.0;
-const GROUND_SIZE: Vector<f32> = vector![50.0, 6.0];
+const GROUND_SIZE: Vector<f32> = vector![40.0, 6.0];
 const DRAG_COEFFICIENT: f32 = 0.1;
 const MAX_THRUST: f32 = 5.0;
 
@@ -46,7 +46,7 @@ impl World {
         let mut rigid_body_set = RigidBodySet::new();
         let mut collider_set = ColliderSet::new();
 
-        let ground_position = vector![50.0, -6.0];
+        let ground_position = vector![40.0, -6.0];
         let _ground_handle =
             Self::create_ground(&mut rigid_body_set, &mut collider_set, ground_position);
 

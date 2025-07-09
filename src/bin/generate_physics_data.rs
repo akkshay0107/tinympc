@@ -53,16 +53,20 @@ fn generate_physics_data(output_path: &str, num_samples: usize) -> Result<(), Bo
         rocket_body.reset_forces(true);
         rocket_body.reset_torques(true);
 
-        // Apply thrusters and step physics
         world.apply_thruster_forces(left_thruster, right_thruster);
         world.step();
 
-        // Get the rocket body again after physics step
         let rocket_body = world.rigid_body_set.get(rocket_handle).unwrap();
         let (result_pos_x, result_pos_y, result_angle) = world.get_rocket_state();
         let result_vel = rocket_body.linvel();
         let result_angular_vel = rocket_body.angvel();
         
+        // Record now storing delta states
+        let delta_pos = (result_pos_x - pos_x, result_pos_y - pos_y);
+        let delta_angle = result_angle - initial_angle;
+        let delta_vel = (result_vel.x - vel_x, result_vel.y - vel_y);
+        let delta_angular_vel = result_angular_vel - angular_vel;
+
         let record = Record::new(
             initial_pos,
             initial_angle,
@@ -70,10 +74,10 @@ fn generate_physics_data(output_path: &str, num_samples: usize) -> Result<(), Bo
             angular_vel,
             left_thruster,
             right_thruster,
-            (result_pos_x, result_pos_y),
-            result_angle,
-            (result_vel.x, result_vel.y),
-            result_angular_vel,
+            delta_pos,
+            delta_angle,
+            delta_vel,
+            delta_angular_vel,
         );
 
         records.push(record);
