@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.tensorboard import SummaryWriter
 
@@ -50,7 +51,8 @@ class DynamicsModel(nn.Module):
 
 
 def load_data(data_path: str, test_size: float = 0.2, val_size: float = 0.1,
-             batch_size: int = 64, random_state: int = 1) -> Tuple[DataLoader, DataLoader, DataLoader]:
+             batch_size: int = 64, random_state: int = 1,
+             normalize: bool = False) -> Tuple[DataLoader, DataLoader, DataLoader]:
     data = pd.read_csv(data_path)
 
     # Input features ([S_t, A_t])
@@ -80,12 +82,18 @@ def load_data(data_path: str, test_size: float = 0.2, val_size: float = 0.1,
     )
 
     # Converting to the convention for Pytorch
-    X_train = torch.FloatTensor(X_train)
     y_train = torch.FloatTensor(y_train)
-    X_val = torch.FloatTensor(X_val)
     y_val = torch.FloatTensor(y_val)
-    X_test = torch.FloatTensor(X_test)
     y_test = torch.FloatTensor(y_test)
+    if normalize:
+        scaler = StandardScaler()
+        X_train = torch.FloatTensor(scaler.fit_transform(X_train))
+        X_val = torch.FloatTensor(scaler.transform(X_val))
+        X_test = torch.FloatTensor(scaler.transform(X_test))
+    else:
+        X_train = torch.FloatTensor(X_train)
+        X_val = torch.FloatTensor(X_val)
+        X_test = torch.FloatTensor(X_test)
 
     train_dataset = RocketDynamicsDataset(X_train, y_train)
     val_dataset = RocketDynamicsDataset(X_val, y_val)
@@ -254,7 +262,8 @@ def main():
         test_size=config['test_size'],
         val_size=config['val_size'],
         batch_size=config['batch_size'],
-        random_state=config['random_state']
+        random_state=config['random_state'],
+        normalize=True
     )
 
     print("Initializing model...")
