@@ -27,7 +27,7 @@ def test_dynamics_model_inference():
         random_state=1
     )
 
-    model = DynamicsModel(input_dim=8, output_dim=6, hidden_dims=[256, 256, 256], dropout_rate=0.0)
+    model = DynamicsModel(input_dim=8, output_dim=6, hidden_dims=[64, 64, 64], dropout_rate=5e-3)
     # Load pre-trained weights
     model_path = PROJECT_ROOT / 'models' / 'dynamics_model.pth'
     if not model_path.exists():

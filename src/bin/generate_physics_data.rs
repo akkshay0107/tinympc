@@ -1,10 +1,12 @@
 use macroquad::prelude::*;
-use rapier2d::prelude::*;
 use rapier2d::na::UnitComplex;
+use rapier2d::prelude::*;
 use tinympc::record::Record;
 use tinympc::world::World;
 
 const NUM_SAMPLES: usize = 200_000;
+const NUM_STEPS: usize = 2; // steps between each control action input
+
 const MIN_POS_X: f32 = 0.0;
 const MAX_POS_X: f32 = 100.0;
 const MIN_POS_Y: f32 = 2.0;
@@ -24,7 +26,10 @@ fn generate_random_velocity() -> (f32, f32) {
     (vx, vy)
 }
 
-fn generate_physics_data(output_path: &str, num_samples: usize) -> Result<(), Box<dyn std::error::Error>> {
+fn generate_physics_data(
+    output_path: &str,
+    num_samples: usize,
+) -> Result<(), Box<dyn std::error::Error>> {
     rand::srand(macroquad::miniquad::date::now() as _);
     let mut records = Vec::with_capacity(num_samples);
     let mut world = World::new();
@@ -53,14 +58,21 @@ fn generate_physics_data(output_path: &str, num_samples: usize) -> Result<(), Bo
         rocket_body.reset_forces(true);
         rocket_body.reset_torques(true);
 
+        // Data now stores result when action is applied for NUM_STEPS (>= 1)
+        // With a larger NUM_STEPS value, the deltas are slightly larger
+        // which reduces the probability of model predicing 0 for all deltas
+        // TODO: fix sampling strategy to prevent collisions with ground
+        // messing with the physics data
         world.apply_thruster_forces(left_thruster, right_thruster);
-        world.step();
+        for _ in 0..NUM_STEPS {
+            world.step();
+        }
 
         let rocket_body = world.rigid_body_set.get(rocket_handle).unwrap();
         let (result_pos_x, result_pos_y, result_angle) = world.get_rocket_state();
         let result_vel = rocket_body.linvel();
         let result_angular_vel = rocket_body.angvel();
-        
+
         // Record now storing delta states
         let delta_pos = (result_pos_x - pos_x, result_pos_y - pos_y);
         let delta_angle = result_angle - initial_angle;
