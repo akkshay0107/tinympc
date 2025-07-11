@@ -1,8 +1,11 @@
 import sys
 import torch
+import json
 from pathlib import Path
 
 # Add root to PATH
+from tomllib import load
+from tomllib import loads
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.append(str(PROJECT_ROOT))
 
@@ -22,9 +25,15 @@ def test_dynamics_model_inference():
         random_state=1
     )
 
-    # TODO: read config for model directly from somewhere
-    # to prevent editing this file every time model config changes
-    model = DynamicsModel(input_dim=8, output_dim=6, hidden_dims=[128, 128, 128], dropout_rate=1e-2)
+    training_config_path = str(PROJECT_ROOT / "training_config.json")
+    with open(training_config_path, 'r') as f:
+        arch = json.load(f)
+    model = DynamicsModel(
+        input_dim=8,
+        output_dim=6,
+        hidden_dims=arch["hidden_dims"],
+        dropout_rate=arch["dropout_rate"]
+    )
     # Load pre-trained weights
     model_path = PROJECT_ROOT / 'models' / 'dynamics_model.pth'
     if not model_path.exists():
