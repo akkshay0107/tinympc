@@ -210,56 +210,30 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
         'log_dir': log_dir if log_dir else None,
     }
 
-
-# def evaluate_model(model: nn.Module, test_loader: DataLoader) -> Dict[str, float]:
-#     # Only pytorch-cpu installed in project
-#     device = torch.device('cpu')
-#     model = model.to(device)
-#     model.eval()
-
-#     loss_fn = nn.MSELoss()
-#     test_loss = 0.0
-
-#     with torch.no_grad():
-#         for X_batch, y_batch in test_loader:
-#             X_batch, y_batch = X_batch.to(device), y_batch.to(device)
-#             outputs = model(X_batch)
-#             test_loss += loss_fn(outputs, y_batch).item() * X_batch.size(0)
-
-#     test_loss /= len(test_loader.dataset) # type: ignore[arg]
-
-#     return {
-#         'mse': test_loss,
-#         'rmse': np.sqrt(test_loss)
-#     }
-
 def evaluate_model(model: nn.Module, test_loader: DataLoader) -> Dict[str, float]:
     device = torch.device('cpu')
     model = model.to(device)
     model.eval()
     loss_fn = nn.MSELoss()
-
     test_loss = 0.0
     all_predictions = []
     all_targets = []
-
     with torch.no_grad():
         for X_batch, y_batch in test_loader:
             X_batch, y_batch = X_batch.to(device), y_batch.to(device)
             outputs = model(X_batch)
             test_loss += loss_fn(outputs, y_batch).item() * X_batch.size(0)
-
             all_predictions.append(outputs)
             all_targets.append(y_batch)
-
     all_predictions = torch.cat(all_predictions, dim=0)
     all_targets = torch.cat(all_targets, dim=0)
     test_loss /= len(test_loader.dataset) # type: ignore[arg]
     rmse = torch.sqrt(torch.tensor(test_loss))
 
-    # MAPE (Mean Absolute Percentage Error)
+    # sMAPE
     epsilon = 1e-8 # avoid division by zero
-    mape = torch.mean(torch.abs((all_targets - all_predictions) / (torch.abs(all_targets) + epsilon))) * 100
+    smape = torch.mean(torch.abs(all_targets - all_predictions) /
+                      (torch.abs(all_targets) + torch.abs(all_predictions) + epsilon)) * 200
 
     # R^2
     ss_res = torch.sum((all_targets - all_predictions) ** 2)
@@ -269,14 +243,13 @@ def evaluate_model(model: nn.Module, test_loader: DataLoader) -> Dict[str, float
     # Calculate per-variable metrics
     per_variable_metrics = {}
     variable_names = ['delta_pos_x', 'delta_pos_y', 'delta_angle', 'delta_vel_x', 'delta_vel_y', 'delta_angular_vel']
-
     for i, var_name in enumerate(variable_names):
         # Per-variable MSE
         var_mse = torch.mean((all_targets[:, i] - all_predictions[:, i]) ** 2)
 
-        # Per-variable MAPE
-        var_mape = torch.mean(torch.abs((all_targets[:, i] - all_predictions[:, i]) /
-                                       (torch.abs(all_targets[:, i]) + epsilon))) * 100
+        # Per-variable sMAPE
+        var_smape = torch.mean(torch.abs(all_targets[:, i] - all_predictions[:, i]) /
+                              (torch.abs(all_targets[:, i]) + torch.abs(all_predictions[:, i]) + epsilon)) * 200
 
         # Per-variable R^2
         var_ss_res = torch.sum((all_targets[:, i] - all_predictions[:, i]) ** 2)
@@ -284,9 +257,8 @@ def evaluate_model(model: nn.Module, test_loader: DataLoader) -> Dict[str, float
         var_r2 = 1 - (var_ss_res / var_ss_tot)
 
         per_variable_metrics[f'{var_name}_mse'] = var_mse.item()
-        per_variable_metrics[f'{var_name}_mape'] = var_mape.item()
+        per_variable_metrics[f'{var_name}_smape'] = var_smape.item()
         per_variable_metrics[f'{var_name}_r2'] = var_r2.item()
-
 
     # mean absolute error
     mae = torch.mean(torch.abs(all_targets - all_predictions))
@@ -300,13 +272,12 @@ def evaluate_model(model: nn.Module, test_loader: DataLoader) -> Dict[str, float
         'mse': test_loss,
         'rmse': rmse.item(),
         'mae': mae.item(),
-        'mape': mape.item(),
+        'smape': smape.item(),
         'r2': r2.item(),
         'max_error': max_error.item(),
         'median_ae': median_ae.item(),
         **per_variable_metrics
     }
-
     return metrics
 
 def print_evaluation_results(metrics: Dict[str, float]):
@@ -315,27 +286,24 @@ def print_evaluation_results(metrics: Dict[str, float]):
     print(f"  MSE:           {metrics['mse']:.6f}")
     print(f"  RMSE:          {metrics['rmse']:.6f}")
     print(f"  MAE:           {metrics['mae']:.6f}")
-    print(f"  MAPE:          {metrics['mape']:.2f}%")
-    print(f"  R^2:            {metrics['r2']:.4f}")
+    print(f"  sMAPE:         {metrics['smape']:.2f}%")
+    print(f"  R^2:           {metrics['r2']:.4f}")
     print(f"  Max Error:     {metrics['max_error']:.6f}")
     print(f"  Median AE:     {metrics['median_ae']:.6f}")
 
     # Per-variable metrics
     variable_names = ['delta_pos_x', 'delta_pos_y', 'delta_angle', 'delta_vel_x', 'delta_vel_y', 'delta_angular_vel']
-
     has_per_var_metrics = any(f'{var}_mse' in metrics for var in variable_names)
     if has_per_var_metrics:
         print("\nPer-Variable Metrics:")
-        print(f"{'Variable':<15} {'MSE':<10} {'MAPE':<8} {'R^2':<8}")
+        print(f"{'Variable':<15} {'MSE':<10} {'sMAPE':<8} {'R^2':<8}")
         print("-" * 45)
-
         for var in variable_names:
             mse_key = f'{var}_mse'
-            mape_key = f'{var}_mape'
+            smape_key = f'{var}_smape'
             r2_key = f'{var}_r2'
-
             if mse_key in metrics:
-                print(f"{var:<15} {metrics[mse_key]:<10.6f} {metrics[mape_key]:<8.2f} {metrics[r2_key]:<8.4f}")
+                print(f"{var:<15} {metrics[mse_key]:<10.6f} {metrics[smape_key]:<8.2f} {metrics[r2_key]:<8.4f}")
 
 
 def main():
@@ -367,7 +335,7 @@ def main():
         val_size=config['val_size'],
         batch_size=config['batch_size'],
         random_state=config['random_state'],
-        normalize=True
+        normalize=False
     )
 
     print("Initializing model...")

@@ -4,6 +4,7 @@
 //! rocket sprite based on its internal state and the functions to
 //! update its internal state
 
+use crate::world::MAX_THRUST;
 use macroquad::prelude::*;
 
 pub const ROCKET_WIDTH: f32 = 10.0;
@@ -14,7 +15,7 @@ const THRUSTER_HEIGHT_RATIO: f32 = 0.4;
 pub struct Rocket {
     x: f32,
     y: f32,
-    angle: f32,  // angle from vertical (radians)
+    angle: f32,          // angle from vertical (radians)
     left_thruster: f32,  // left thruster power (normalized)
     right_thruster: f32, // right thruster power (normalized)
 }
@@ -31,24 +32,20 @@ impl Rocket {
     }
 
     pub fn get_state(&self) -> (f32, f32, f32, (f32, f32)) {
-        (self.x, self.y, self.angle, (self.left_thruster, self.right_thruster))
+        (
+            self.x,
+            self.y,
+            self.angle,
+            (self.left_thruster, self.right_thruster),
+        )
     }
 
     pub fn set_state(&mut self, x: f32, y: f32, angle: f32, thrust: (f32, f32)) {
         self.x = x;
         self.y = y;
         self.angle = angle;
-        self.left_thruster = thrust.0.min(1.0);
-        self.right_thruster = thrust.1.min(1.0);
-    }
-    
-    pub fn set_thruster(&mut self, left: Option<f32>, right: Option<f32>) {
-        if let Some(power) = left {
-            self.left_thruster = power.min(1.0);
-        }
-        if let Some(power) = right {
-            self.right_thruster = power.min(1.0);
-        }
+        self.left_thruster = thrust.0.clamp(0.0, MAX_THRUST);
+        self.right_thruster = thrust.1.clamp(0.0, MAX_THRUST);
     }
 
     pub fn draw(&self) {
