@@ -1,6 +1,5 @@
 import sys
 import torch
-import numpy as np
 from pathlib import Path
 
 # Add root to PATH
@@ -10,10 +9,6 @@ sys.path.append(str(PROJECT_ROOT))
 from src.tinympc.dynamics_model import DynamicsModel, load_data
 
 def test_dynamics_model_inference():
-    # Fix seed to get same results every run of this test
-    torch.manual_seed(1)
-    np.random.seed(1)
-
     data_path = PROJECT_ROOT / 'data' / 'physics_data.csv'
 
     if not data_path.exists():
@@ -27,7 +22,9 @@ def test_dynamics_model_inference():
         random_state=1
     )
 
-    model = DynamicsModel(input_dim=8, output_dim=6, hidden_dims=[64, 64, 64], dropout_rate=5e-3)
+    # TODO: read config for model directly from somewhere
+    # to prevent editing this file every time model config changes
+    model = DynamicsModel(input_dim=8, output_dim=6, hidden_dims=[128, 128, 128], dropout_rate=1e-2)
     # Load pre-trained weights
     model_path = PROJECT_ROOT / 'models' / 'dynamics_model.pth'
     if not model_path.exists():
