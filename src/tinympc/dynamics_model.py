@@ -4,7 +4,6 @@ from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 import os
 
-import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
@@ -212,13 +211,37 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
     }
 
 
+# def evaluate_model(model: nn.Module, test_loader: DataLoader) -> Dict[str, float]:
+#     # Only pytorch-cpu installed in project
+#     device = torch.device('cpu')
+#     model = model.to(device)
+#     model.eval()
+
+#     loss_fn = nn.MSELoss()
+#     test_loss = 0.0
+
+#     with torch.no_grad():
+#         for X_batch, y_batch in test_loader:
+#             X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+#             outputs = model(X_batch)
+#             test_loss += loss_fn(outputs, y_batch).item() * X_batch.size(0)
+
+#     test_loss /= len(test_loader.dataset) # type: ignore[arg]
+
+#     return {
+#         'mse': test_loss,
+#         'rmse': np.sqrt(test_loss)
+#     }
+
 def evaluate_model(model: nn.Module, test_loader: DataLoader) -> Dict[str, float]:
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cpu')
     model = model.to(device)
     model.eval()
-
     loss_fn = nn.MSELoss()
+
     test_loss = 0.0
+    all_predictions = []
+    all_targets = []
 
     with torch.no_grad():
         for X_batch, y_batch in test_loader:
@@ -226,12 +249,93 @@ def evaluate_model(model: nn.Module, test_loader: DataLoader) -> Dict[str, float
             outputs = model(X_batch)
             test_loss += loss_fn(outputs, y_batch).item() * X_batch.size(0)
 
-    test_loss /= len(test_loader.dataset) # type: ignore[arg]
+            all_predictions.append(outputs)
+            all_targets.append(y_batch)
 
-    return {
+    all_predictions = torch.cat(all_predictions, dim=0)
+    all_targets = torch.cat(all_targets, dim=0)
+    test_loss /= len(test_loader.dataset) # type: ignore[arg]
+    rmse = torch.sqrt(torch.tensor(test_loss))
+
+    # MAPE (Mean Absolute Percentage Error)
+    epsilon = 1e-8 # avoid division by zero
+    mape = torch.mean(torch.abs((all_targets - all_predictions) / (torch.abs(all_targets) + epsilon))) * 100
+
+    # R^2
+    ss_res = torch.sum((all_targets - all_predictions) ** 2)
+    ss_tot = torch.sum((all_targets - torch.mean(all_targets)) ** 2)
+    r2 = 1 - (ss_res / ss_tot)
+
+    # Calculate per-variable metrics
+    per_variable_metrics = {}
+    variable_names = ['delta_pos_x', 'delta_pos_y', 'delta_angle', 'delta_vel_x', 'delta_vel_y', 'delta_angular_vel']
+
+    for i, var_name in enumerate(variable_names):
+        # Per-variable MSE
+        var_mse = torch.mean((all_targets[:, i] - all_predictions[:, i]) ** 2)
+
+        # Per-variable MAPE
+        var_mape = torch.mean(torch.abs((all_targets[:, i] - all_predictions[:, i]) /
+                                       (torch.abs(all_targets[:, i]) + epsilon))) * 100
+
+        # Per-variable R^2
+        var_ss_res = torch.sum((all_targets[:, i] - all_predictions[:, i]) ** 2)
+        var_ss_tot = torch.sum((all_targets[:, i] - torch.mean(all_targets[:, i])) ** 2)
+        var_r2 = 1 - (var_ss_res / var_ss_tot)
+
+        per_variable_metrics[f'{var_name}_mse'] = var_mse.item()
+        per_variable_metrics[f'{var_name}_mape'] = var_mape.item()
+        per_variable_metrics[f'{var_name}_r2'] = var_r2.item()
+
+
+    # mean absolute error
+    mae = torch.mean(torch.abs(all_targets - all_predictions))
+    # Maximum absolute error
+    max_error = torch.max(torch.abs(all_targets - all_predictions))
+    # Median absolute error (more robust to outliers)
+    median_ae = torch.median(torch.abs(all_targets - all_predictions))
+
+    # compiling all metrics
+    metrics = {
         'mse': test_loss,
-        'rmse': np.sqrt(test_loss)
+        'rmse': rmse.item(),
+        'mae': mae.item(),
+        'mape': mape.item(),
+        'r2': r2.item(),
+        'max_error': max_error.item(),
+        'median_ae': median_ae.item(),
+        **per_variable_metrics
     }
+
+    return metrics
+
+def print_evaluation_results(metrics: Dict[str, float]):
+    # Overall metrics
+    print("Test Metrics:")
+    print(f"  MSE:           {metrics['mse']:.6f}")
+    print(f"  RMSE:          {metrics['rmse']:.6f}")
+    print(f"  MAE:           {metrics['mae']:.6f}")
+    print(f"  MAPE:          {metrics['mape']:.2f}%")
+    print(f"  R^2:            {metrics['r2']:.4f}")
+    print(f"  Max Error:     {metrics['max_error']:.6f}")
+    print(f"  Median AE:     {metrics['median_ae']:.6f}")
+
+    # Per-variable metrics
+    variable_names = ['delta_pos_x', 'delta_pos_y', 'delta_angle', 'delta_vel_x', 'delta_vel_y', 'delta_angular_vel']
+
+    has_per_var_metrics = any(f'{var}_mse' in metrics for var in variable_names)
+    if has_per_var_metrics:
+        print("\nPer-Variable Metrics:")
+        print(f"{'Variable':<15} {'MSE':<10} {'MAPE':<8} {'R^2':<8}")
+        print("-" * 45)
+
+        for var in variable_names:
+            mse_key = f'{var}_mse'
+            mape_key = f'{var}_mape'
+            r2_key = f'{var}_r2'
+
+            if mse_key in metrics:
+                print(f"{var:<15} {metrics[mse_key]:<10.6f} {metrics[mape_key]:<8.2f} {metrics[r2_key]:<8.4f}")
 
 
 def main():
@@ -291,8 +395,7 @@ def main():
     model.load_state_dict(checkpoint['model_state_dict'])
     print("\nEvaluating on test set...")
     metrics = evaluate_model(model, test_loader)
-    print(f"Test MSE: {metrics['mse']:.6f}")
-    print(f"Test RMSE: {metrics['rmse']:.6f}")
+    print_evaluation_results(metrics)
 
     # Save config
     with open('training_config.json', 'w') as f:
