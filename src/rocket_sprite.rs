@@ -1,8 +1,8 @@
 //! Module for managing the rocket sprite
 //!
-//! This module contains the implementation to draw the (now simplified)
-//! rocket sprite based on its internal state and the functions to
-//! update its internal state
+//! This module contains the implementation to draw the rocket sprite
+//! based on its internal state and the functions to update its internal
+//! state
 
 use crate::world::MAX_THRUST;
 use macroquad::prelude::*;
@@ -12,7 +12,7 @@ pub const ROCKET_HEIGHT: f32 = 40.0;
 const THRUSTER_WIDTH_RATIO: f32 = 0.4;
 const THRUSTER_HEIGHT_RATIO: f32 = 0.4;
 
-pub struct Rocket {
+pub struct RocketSprite {
     x: f32,
     y: f32,
     angle: f32,          // angle from vertical (radians)
@@ -20,7 +20,7 @@ pub struct Rocket {
     right_thruster: f32, // right thruster power (normalized)
 }
 
-impl Rocket {
+impl RocketSprite {
     pub fn new(x: f32, y: f32) -> Self {
         Self {
             x,

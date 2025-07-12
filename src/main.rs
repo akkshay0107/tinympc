@@ -1,6 +1,6 @@
 use macroquad::prelude::*;
 use rapier2d::prelude::*;
-use tinympc::rocket::*;
+use tinympc::rocket_sprite::*;
 use tinympc::world::{World, pixel_to_world, world_to_pixel};
 
 const GROUND_CRUST_COLOR: Color = Color::new(0.4, 0.2, 0.1, 1.0); // Darker than interior
@@ -13,7 +13,7 @@ const DRAG_POINTER_RADIUS: f32 = 4.0;
 
 struct Game {
     stars: Vec<(f32, f32, f32)>,
-    rocket: Rocket,
+    rocket: RocketSprite,
 }
 
 impl Game {
@@ -28,7 +28,7 @@ impl Game {
 
         let rocket_x = screen_width() / 2.0;
         let ground_y = screen_height() * 0.8;
-        let rocket = Rocket::new(rocket_x, ground_y);
+        let rocket = RocketSprite::new(rocket_x, ground_y);
         Self { stars, rocket }
     }
 

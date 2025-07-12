@@ -1,3 +1,3 @@
 pub mod world;
-pub mod rocket;
+pub mod rocket_sprite;
 pub mod record;
