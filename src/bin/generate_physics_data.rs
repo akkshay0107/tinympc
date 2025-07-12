@@ -7,7 +7,7 @@ use tinympc::record::Record;
 use tinympc::world::{MAX_THRUST, World};
 
 const EXPECTED_TRAJ_SIZE: usize = 200; // roughly 3s per trajectory at 60 fps
-const NUM_TRAJECTORIES: usize = 1000;
+const NUM_TRAJECTORIES: usize = 2000;
 
 const MAX_POS_X: f32 = 80.0; // Min pos x is 0
 const _MIN_POS_Y: f32 = 2.0; // COM of vertical rocket is at 2.0 when it touches the ground
@@ -33,7 +33,7 @@ fn get_balanced_thrusters(state: (f32, f32, f32)) -> (f32, f32) {
     let x_bias = (x_center - state.0) / x_center;
     let angle_bias = state.2 / PI;
     let bias = (x_bias + angle_bias) / 2.0;
-    let noise = rand::gen_range(-0.2, 0.2);
+    let noise = rand::gen_range(-0.3, 0.3);
 
     let total_thrust = 1.5 * rand::gen_range(0.0, MAX_THRUST); // Lower likelihood of thrust exceeding gravity
     let left_thrust = total_thrust * (1.0 + bias + noise);
@@ -61,8 +61,9 @@ fn generate_physics_data(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut records: Vec<Record> = Vec::with_capacity(num_traj * EXPECTED_TRAJ_SIZE);
 
+    let five_percent = NUM_TRAJECTORIES / 20;
     let mut world = World::new();
-    for _ in 0..num_traj {
+    for i in 0..num_traj {
         let rocket_handle = world.rocket_body_handle;
         let rocket = world.rigid_body_set.get_mut(rocket_handle).unwrap();
 
@@ -110,6 +111,15 @@ fn generate_physics_data(
             } else {
                 break;
             }
+        }
+        // Progress indicator
+        if (i + 1) % five_percent == 0 {
+            println!(
+                "{}/{} trajectories completed [{}%]",
+                i + 1,
+                NUM_TRAJECTORIES,
+                5 * (i + 1) / five_percent
+            );
         }
     }
 
