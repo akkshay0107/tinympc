@@ -1,15 +1,14 @@
 import sys
-import torch
-import json
+import os
 from pathlib import Path
 
-# Add root to PATH
-from tomllib import load
-from tomllib import loads
+# Add project root to PATH
 PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.append(str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT))
 
+import torch
 from src.tinympc.dynamics_model import DynamicsModel, load_data
+from src.utils.load_toml_config import load_toml_config
 
 def test_dynamics_model_inference():
     data_path = PROJECT_ROOT / 'data' / 'physics_data.csv'
@@ -25,18 +24,19 @@ def test_dynamics_model_inference():
         random_state=1
     )
 
-    training_config_path = str(PROJECT_ROOT / "training_config.json")
-    with open(training_config_path, 'r') as f:
-        arch = json.load(f)
+    training_config_path = str(PROJECT_ROOT / "dynamics_model_training_config.toml")
+    config = load_toml_config(training_config_path)
+    
     model = DynamicsModel(
         input_dim=8,
         output_dim=6,
-        hidden_dims=arch["hidden_dims"],
-        dropout_rate=arch["dropout_rate"]
+        hidden_dims=config["hidden_dims"],
+        dropout_rate=config["dropout_rate"]
     )
+    
     # Load pre-trained weights
-    model_path = PROJECT_ROOT / 'models' / 'dynamics_model.pth'
-    if not model_path.exists():
+    model_path = config["model_save_path"]
+    if not Path(model_path).exists():
         raise FileNotFoundError(f"Model file not found at {model_path}")
 
     checkpoint = torch.load(str(model_path), map_location=torch.device('cpu'))

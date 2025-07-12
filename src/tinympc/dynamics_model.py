@@ -1,8 +1,12 @@
-import json
+import sys
+import os
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
-import os
+
+# Add project root to PATH
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 import pandas as pd
 import torch
@@ -13,6 +17,7 @@ from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.tensorboard import SummaryWriter
 
+from src.utils.load_toml_config import load_toml_config
 
 class RocketDynamicsDataset(Dataset):
     def __init__(self, X: torch.Tensor, y: torch.Tensor):
@@ -307,25 +312,7 @@ def print_evaluation_results(metrics: Dict[str, float]):
 
 
 def main():
-    # Project root directory (one level up from src/tinympc)
-    PROJECT_ROOT = Path(__file__).parent.parent.parent
-
-    # Hyperparameters + layer architecture
-    config = {
-        'data_path': str(PROJECT_ROOT / 'data' / 'physics_data.csv'),
-        'model_save_path': str(PROJECT_ROOT / 'models' / 'dynamics_model.pth'),
-        'log_dir': str(PROJECT_ROOT / 'runs'),
-        'batch_size': 64,
-        'hidden_dims': [128, 128, 128],
-        'learning_rate': 1e-3,
-        'dropout_rate': 1e-2,
-        'num_epochs': 100,
-        'patience': 15,
-        'test_size': 0.15,
-        'val_size': 0.15,
-        'random_state': 1
-    }
-
+    config = load_toml_config(str(PROJECT_ROOT / 'dynamics_model_training_config.toml'))
     (PROJECT_ROOT / 'models').mkdir(parents=True, exist_ok=True)
 
     print("Loading data...")
@@ -335,7 +322,7 @@ def main():
         val_size=config['val_size'],
         batch_size=config['batch_size'],
         random_state=config['random_state'],
-        normalize=False
+        normalize=config['normalize']
     )
 
     print("Initializing model...")
@@ -364,10 +351,6 @@ def main():
     print("\nEvaluating on test set...")
     metrics = evaluate_model(model, test_loader)
     print_evaluation_results(metrics)
-
-    # Save config
-    with open('training_config.json', 'w') as f:
-        json.dump(config, f, indent=4)
 
     print("\nTraining completed successfully!")
     print(f"Best validation loss: {training_result['best_val_loss']:.6f}")
