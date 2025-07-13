@@ -4,10 +4,6 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 
-# Add project root to PATH
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
-
 import pandas as pd
 import torch
 import torch.nn as nn
@@ -17,7 +13,14 @@ from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.tensorboard import SummaryWriter
 
+# Add project root to PATH
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
 from src.utils.load_toml_config import load_toml_config
+
+INPUT_DIMS = 8 # 6 state variables + 2 controls
+OUTPUT_DIMS = 6 # 6 state variables
 
 class RocketDynamicsDataset(Dataset):
     def __init__(self, X: torch.Tensor, y: torch.Tensor):
@@ -326,9 +329,10 @@ def main():
     )
 
     print("Initializing model...")
+    # TODO: move input and output dims to constants
     model = DynamicsModel(
-        input_dim=8,  # 6 state + 2 action dimensions
-        output_dim=6,  # 6 state dimensions
+        input_dim=INPUT_DIMS,
+        output_dim=OUTPUT_DIMS,
         hidden_dims=config['hidden_dims'],
         dropout_rate=config['dropout_rate']
     )
