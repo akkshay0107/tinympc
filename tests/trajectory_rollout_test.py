@@ -13,7 +13,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.tinympc.dynamics_model import DynamicsModel, INPUT_DIMS, OUTPUT_DIMS
 from src.utils.load_toml_config import load_toml_config
 
-# TODO: add plotting of the two trajectories
+# TODO: add support for normalized inputs to the model
 class TrajectoryRolloutTester:
     def __init__(self):
         self.rust_bin_path = PROJECT_ROOT / "target" / "debug" / "simulate_trajectory"
@@ -111,6 +111,54 @@ class TrajectoryRolloutTester:
             'mse_angular_vel': mse[5],     # Angular velocity MSE
         }
 
+    def plot_trajectories(self, rust_positions: np.ndarray, model_positions: np.ndarray, save_path: str):
+        import matplotlib.pyplot as plt
+        plt.figure(figsize=(10, 6))
+
+        # Plot rust and model trajectories (only position)
+        plt.scatter(
+            rust_positions[:, 0],
+            rust_positions[:, 1],
+            c='blue',
+            label='Actual Trajectory',
+            alpha=0.6,
+            s=10
+        )
+        plt.scatter(
+            model_positions[:, 0],
+            model_positions[:, 1],
+            c='red',
+            label='Predicted Trajectory',
+            alpha=0.6,
+            s=10,
+            marker='x'
+        )
+
+        # Add start marker
+        plt.scatter(
+            rust_positions[0, 0],
+            rust_positions[0, 1],
+            c='green',
+            marker='o',
+            s=100,
+            label='Start'
+        )
+
+        # Setting limits slightly around the actual x and y limits
+        # TODO: use constants
+        plt.xlim(0, 80)
+        plt.ylim(0, 50)
+
+        plt.xlabel('X Position')
+        plt.ylabel('Y Position')
+        plt.title('Rocket Trajectory comparison')
+        plt.legend()
+        plt.grid(True)
+
+        plt.tight_layout()
+        plt.savefig(save_path)
+        print(f"Saved trajectory comparison plot to {save_path}")
+        plt.close()
 
 
 def test_trajectory_rollout():
@@ -145,6 +193,12 @@ def test_trajectory_rollout():
     print(f"Angle MSE: {metrics['mse_angle']:.6f}")
     print(f"Velocity MSE: {metrics['mse_vel']:.6f}")
     print(f"Angular Velocity MSE: {metrics['mse_angular_vel']:.6f}")
+
+    tester.plot_trajectories(
+        rust_traj[['pos_x', 'pos_y']].to_numpy(),
+        model_states[:, :2],
+        save_path=str(PROJECT_ROOT / 'plots' / 'trajectory_comparison.png')
+    )
 
 if __name__ == "__main__":
     test_trajectory_rollout()
