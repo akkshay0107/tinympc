@@ -43,7 +43,7 @@ class TrajectoryRolloutTester:
         return {
             'pos_x': np.random.uniform(30.0, 50.0),  # plus minus 10m from center
             'pos_y': np.random.uniform(25.0, 40.0),  # Upper half
-            'angle': np.random.uniform(-np.pi/4, np.pi/4)  # plus minus 45 degrees
+            'angle': np.random.uniform(-np.pi/12, np.pi/12)  # plus minus 15 degrees
         }
 
     def run_rust_simulation(self, initial_conditions: Dict[str, float]) -> pd.DataFrame:

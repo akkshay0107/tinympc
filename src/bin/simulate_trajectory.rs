@@ -9,7 +9,7 @@ use tinympc::world::{MAX_THRUST, World};
 const MAX_POS_X: f32 = 80.0; // Min pos x is 0
 const _MIN_POS_Y: f32 = 2.0; // COM of vertical rocket is at 2.0 when it touches the ground
 const MAX_POS_Y: f32 = 45.0;
-const GROUND_THRESHOLD: f32 = 1.9; // Slightly under min possible y
+const GROUND_THRESHOLD: f32 = 1.99; // Slightly under min possible y
 
 // TODO: get the helper fns from generate_physics_data.rs instead of rewrite
 fn get_balanced_thrusters(state: (f32, f32, f32)) -> (f32, f32) {

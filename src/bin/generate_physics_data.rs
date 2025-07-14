@@ -1,6 +1,7 @@
 use std::f32::consts::PI;
 
 use macroquad::prelude::*;
+use macroquad::rand::gen_range;
 use rapier2d::na::Isometry2;
 use rapier2d::prelude::*;
 use tinympc::record::Record;
@@ -12,12 +13,13 @@ const NUM_TRAJECTORIES: usize = 2000;
 const MAX_POS_X: f32 = 80.0; // Min pos x is 0
 const _MIN_POS_Y: f32 = 2.0; // COM of vertical rocket is at 2.0 when it touches the ground
 const MAX_POS_Y: f32 = 45.0;
+const MAX_ANGLE_DEFLECTION: f32 = PI / 12.0;
 const MAX_VX: f32 = 5.0;
 const MIN_VY: f32 = -2.0;
 const MAX_VY: f32 = 5.0;
 const MAX_ANGULAR_VELOCITY: f32 = 0.3;
 
-const GROUND_THRESHOLD: f32 = 1.9; // Slightly under min possible y
+const GROUND_THRESHOLD: f32 = 1.99; // Slightly under min possible y
 
 fn get_balanced_velocity(x: f32) -> ((f32, f32), f32) {
     let angvel: f32 = rand::gen_range(-MAX_ANGULAR_VELOCITY, MAX_ANGULAR_VELOCITY);
@@ -28,14 +30,19 @@ fn get_balanced_velocity(x: f32) -> ((f32, f32), f32) {
     ((vx, vy), angvel)
 }
 
-fn get_balanced_thrusters(state: (f32, f32, f32)) -> (f32, f32) {
+fn get_balanced_thrusters(state: (f32, f32, f32), dominant: bool) -> (f32, f32) {
     let x_center = MAX_POS_X / 2.0;
     let x_bias = (x_center - state.0) / x_center;
     let angle_bias = state.2 / PI;
     let bias = (x_bias + angle_bias) / 2.0;
     let noise = rand::gen_range(-0.3, 0.3);
 
-    let total_thrust = 1.5 * rand::gen_range(0.0, MAX_THRUST); // Lower likelihood of thrust exceeding gravity
+    let total_thrust = if dominant {
+        1.5 * gen_range(0.0, MAX_THRUST) // 34% chance of thrust exceeding gravity
+    } else {
+        gen_range(0.0, MAX_THRUST) // 2% chance of thrust exceeding gravity
+    };
+
     let left_thrust = total_thrust * (1.0 + bias + noise);
     let right_thrust = total_thrust * (1.0 - bias - noise);
 
@@ -69,17 +76,18 @@ fn generate_physics_data(
 
         let start_x: f32 = rand::gen_range(MAX_POS_X / 4.0, 3.0 * MAX_POS_X / 4.0); // Middle half
         let start_y: f32 = rand::gen_range(MAX_POS_Y / 2.0, MAX_POS_Y); // Upper half
-        let start_angle: f32 = rand::gen_range(-PI / 3.0, PI / 3.0);
+        let start_angle: f32 = rand::gen_range(-MAX_ANGLE_DEFLECTION, MAX_ANGLE_DEFLECTION);
         let (init_linvel, init_angvel) = get_balanced_velocity(start_x);
 
         rocket.set_position(Isometry2::new(vector![start_x, start_y], start_angle), true);
         rocket.set_linvel(vector![init_linvel.0, init_linvel.1], true);
         rocket.set_angvel(init_angvel, true);
 
+        let dominant = (i % 2) == 0;
         loop {
             let original_state = world.get_rocket_state();
             let original_dynamics = world.get_rocket_dynamics();
-            let (left_thruster, right_thruster) = get_balanced_thrusters(original_state);
+            let (left_thruster, right_thruster) = get_balanced_thrusters(original_state, dominant);
             world.apply_thruster_forces(left_thruster, right_thruster);
             world.step();
             let resultant_state = world.get_rocket_state();
