@@ -19,7 +19,7 @@ fn get_balanced_thrusters(state: (f32, f32, f32)) -> (f32, f32) {
     let bias = (x_bias + angle_bias) / 2.0;
     let noise = rand::gen_range(-0.3, 0.3);
 
-    let total_thrust = 1.5 * rand::gen_range(0.0, MAX_THRUST); // Lower likelihood of thrust exceeding gravity
+    let total_thrust = 1.2 * rand::gen_range(0.0, MAX_THRUST); // Lower likelihood of thrust exceeding gravity
     let left_thrust = total_thrust * (1.0 + bias + noise);
     let right_thrust = total_thrust * (1.0 - bias - noise);
 

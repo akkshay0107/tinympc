@@ -360,5 +360,26 @@ def main():
     print(f"Best validation loss: {training_result['best_val_loss']:.6f}")
     print(f"Model saved to {config['model_save_path']}")
 
+    # Save to ONNX format
+    onnx_path = PROJECT_ROOT / 'models' / 'dynamics_model.onnx'
+    dummy_input = (torch.randn(1, INPUT_DIMS),)
+    onnx_program = torch.onnx.export(
+        model,
+        dummy_input,
+        do_constant_folding=True,
+        input_names=['input'],
+        output_names=['output'],
+        dynamic_axes={
+            'input': {0: 'batch_size'},
+            'output': {0: 'batch_size'}
+        },
+        dynamo=True
+    )
+
+    if onnx_program:
+        onnx_program.save(str(onnx_path))
+    else:
+        print("Failed to generate ONNX program for the model")
+
 if __name__ == "__main__":
     main()

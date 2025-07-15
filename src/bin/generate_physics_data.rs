@@ -8,7 +8,7 @@ use tinympc::record::Record;
 use tinympc::world::{MAX_THRUST, World};
 
 const EXPECTED_TRAJ_SIZE: usize = 200; // roughly 3s per trajectory at 60 fps
-const NUM_TRAJECTORIES: usize = 2000;
+const NUM_TRAJECTORIES: usize = 4000;
 
 const MAX_POS_X: f32 = 80.0; // Min pos x is 0
 const _MIN_POS_Y: f32 = 2.0; // COM of vertical rocket is at 2.0 when it touches the ground
