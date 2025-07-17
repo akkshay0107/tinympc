@@ -1,4 +1,4 @@
-use ndarray::Array2;
+use ndarray::{Array2, ArrayD};
 use ort::{
     session::{Session, builder::GraphOptimizationLevel},
     value::TensorRef,
@@ -18,19 +18,20 @@ impl DynamicsModel {
         Ok(DynamicsModel { session })
     }
 
-    pub fn predict(&mut self, input: &[f32; 8]) -> Result<[f32; 6], Box<dyn std::error::Error>> {
-        let input_array = Array2::from_shape_vec((1, 8), input.to_vec())?;
+    pub fn predict(
+        &mut self,
+        input: &Array2<f32>,
+    ) -> Result<ArrayD<f32>, Box<dyn std::error::Error>> {
+        if input.shape() != [1, 8] {
+            return Err("Input array shape mismatch. Expected (1, 8).".into());
+        }
 
         let outputs = self
             .session
-            .run(ort::inputs![TensorRef::from_array_view(&input_array)?])?;
+            .run(ort::inputs![TensorRef::from_array_view(input)?])?;
         let output_tensor = outputs["output"].try_extract_array::<f32>()?;
 
-        let mut result = [0.0; 6];
-        for i in 0..6 {
-            result[i] = output_tensor[[0, i]];
-        }
-
+        let result = output_tensor.to_owned();
         Ok(result)
     }
 }
@@ -63,14 +64,14 @@ mod tests {
         ensure_model_exists();
 
         let mut model = DynamicsModel::new(MODEL_PATH).expect("Failed to initialize model");
-        let input = [0.0; 8];
+        let input = Array2::zeros((1, 8));
         let result = model.predict(&input);
 
         assert!(result.is_ok(), "Prediction failed");
         let output = result.unwrap();
 
         println!("Model output: {:?}", output);
-        assert_eq!(output.len(), 6, "Unexpected output dimension");
+        assert_eq!(output.shape(), [1, 6], "Unexpected output dimension");
 
         // Verify all outputs are finite
         for (i, &value) in output.iter().enumerate() {
