@@ -4,7 +4,7 @@ use ort::{
     value::TensorRef,
 };
 
-struct DynamicsModel {
+pub struct DynamicsModel {
     session: Session,
 }
 
