@@ -36,7 +36,7 @@ impl CEMController {
             action_dim: 2,
             state_dim: 6,
             action_bounds,
-            convergence_threshold: 1e-3,
+            convergence_threshold: 0.1,
             alpha: 0.1,
         })
     }
@@ -55,7 +55,7 @@ impl CEMController {
         let mut best_cost = f32::INFINITY;
         let mut best_actions = Array2::zeros((self.horizon, self.action_dim));
 
-        for iteration in 0..self.max_iterations {
+        for i in 0..self.max_iterations {
             let mut action_samples = Vec::new();
             let mut costs = Vec::new();
 
@@ -120,17 +120,20 @@ impl CEMController {
 
             let std_sum: f32 = action_std.sum();
             if std_sum < self.convergence_threshold {
-                println!("CEM converged after {} iterations", iteration + 1);
+                println!("CEM converged after {} iterations", i + 1);
                 break;
             }
 
-            if iteration % 10 == 0 {
-                println!(
-                    "Iteration {}: Best cost = {:.6}, Avg std = {:.6}",
-                    iteration,
-                    best_cost,
-                    std_sum / (self.horizon * self.action_dim) as f32
-                );
+            #[cfg(feature = "logging")]
+            {
+                if (i + 1) % 10 == 0 {
+                    println!(
+                        "Iteration {}: Best cost = {:.6}, Avg std = {:.6}",
+                        i,
+                        best_cost,
+                        std_sum / (self.horizon * self.action_dim) as f32
+                    );
+                }
             }
         }
 
