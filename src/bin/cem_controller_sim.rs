@@ -9,37 +9,13 @@ use tinympc::game::Game;
 use tinympc::world::{MAX_THRUST, World, world_to_pixel};
 
 pub const START_BOX: [f32; 4] = [25.0, 40.0, 55.0, 30.0]; // (xy top left, xy bottom right)
-const CONTROL_HORIZON: usize = 5;
-const ELITE_SAMPLES: usize = 5;
+const CONTROL_HORIZON: usize = 20;
+const ELITE_SAMPLES: usize = 10;
 const MAX_ITER: usize = 10;
+const ALPHA: f32 = 0.1;
 const TARGET_ARRAY: [f32; 6] = [40.0, 2.0, 0.0, 0.0, 0.0, 0.0];
-const Q_ARRAY: [f32; 6] = [1.0, 1.0, 20.0, 0.2, 0.2, 5.0];
-const R_ARRAY: [f32; 2] = [1.0, 1.0];
-
-// TODO: add this to main loop for quick resetting
-// instead of closing and rerunning the file
-struct ResetButton {
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-}
-
-impl ResetButton {
-    pub fn new(x: f32, y: f32, width: f32, height: f32) -> Self {
-        Self {
-            x,
-            y,
-            width,
-            height,
-        }
-    }
-
-    pub fn draw(&self) {
-        draw_rectangle(self.x, self.y, self.width, self.height, GREEN);
-        draw_text("Reset Sim", self.x, self.y, 12.0, WHITE);
-    }
-}
+const Q_ARRAY: [f32; 6] = [10.0, 10.0, 0.0, 0.0, 0.0, 0.0];
+const R_ARRAY: [f32; 2] = [0.0, 0.0];
 
 fn get_new_start() -> (f32, f32) {
     let start_x = rand::gen_range(START_BOX[0], START_BOX[2]);
@@ -61,10 +37,11 @@ async fn main() {
     let mut cem_controller = CEMController::new(
         "models/dynamics_model.onnx",
         CONTROL_HORIZON,
-        10 * ELITE_SAMPLES,
+        20 * ELITE_SAMPLES,
         ELITE_SAMPLES,
         MAX_ITER,
         (0.0, MAX_THRUST),
+        ALPHA,
     )
     .unwrap();
 

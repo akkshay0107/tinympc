@@ -24,8 +24,17 @@ impl CEMController {
         num_elite: usize,
         max_iterations: usize,
         action_bounds: (f32, f32),
+        mut alpha: f32,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let dynamics_model = DynamicsModel::new(model_path)?;
+
+        if alpha < 0.0 || alpha > 1.0 {
+            eprintln!(
+                "Alpha provided ({}) is outside the range [0,1]. Adjusted to the nearest value",
+                alpha
+            );
+            alpha = alpha.clamp(0.0, 1.0);
+        }
 
         Ok(CEMController {
             dynamics_model,
@@ -37,7 +46,7 @@ impl CEMController {
             state_dim: 6,
             action_bounds,
             convergence_threshold: 0.1,
-            alpha: 0.1,
+            alpha,
         })
     }
 
@@ -123,18 +132,6 @@ impl CEMController {
                 println!("CEM converged after {} iterations", i + 1);
                 break;
             }
-
-            #[cfg(feature = "logging")]
-            {
-                if (i + 1) % 10 == 0 {
-                    println!(
-                        "Iteration {}: Best cost = {:.6}, Avg std = {:.6}",
-                        i,
-                        best_cost,
-                        std_sum / (self.horizon * self.action_dim) as f32
-                    );
-                }
-            }
         }
 
         println!("CEM completed. Best cost: {:.6}", best_cost);
@@ -184,15 +181,6 @@ impl CEMController {
             total_cost += state_cost + action_cost;
             state = next_state;
         }
-
-        let terminal_diff = &state - goal_state;
-        let terminal_cost: f32 = terminal_diff
-            .iter()
-            .zip(q_weights.iter())
-            .map(|(s, q)| q * s * s * 10.0) // Higher weight for terminal state
-            .sum();
-
-        total_cost += terminal_cost;
 
         Ok(total_cost)
     }
@@ -264,6 +252,7 @@ mod tests {
             10,          // num_elite
             50,          // max_iterations
             (-1.0, 1.0), // action_bounds
+            0.1,         // alpha
         );
 
         assert!(controller.is_ok(), "Failed to initialize CEMController");
@@ -280,6 +269,7 @@ mod tests {
             5,          // num_elite
             20,         // max_iterations
             (0.0, 5.0), // action_bounds
+            0.1,        // alpha
         )
         .expect("Failed to create controller");
 
@@ -312,6 +302,7 @@ mod tests {
             2,          // num_elite
             5,          // max_iterations
             (0.0, 5.0), // action_bounds
+            0.1,        // alpha
         )
         .expect("Failed to create controller");
 
