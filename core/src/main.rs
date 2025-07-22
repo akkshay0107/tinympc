@@ -1,7 +1,8 @@
+// TODO: fix imports to not be hardcoded to crate name
+use core::game::{DRAG_POINTER_COLOR, DRAG_POINTER_RADIUS, Game};
+use core::world::{World, pixel_to_world, world_to_pixel};
 use macroquad::prelude::*;
 use rapier2d::prelude::*;
-use tinympc::game::{DRAG_POINTER_COLOR, DRAG_POINTER_RADIUS, Game};
-use tinympc::world::{World, pixel_to_world, world_to_pixel};
 
 #[macroquad::main("Uncontrolled Sim")]
 async fn main() {

@@ -1,9 +1,9 @@
 use std::f32::consts::PI;
-
+// TODO: fix imports to not be hardcoded to crate name
+use core::world::{MAX_THRUST, World};
 use macroquad::prelude::*;
 use rapier2d::prelude::*;
 use std::env;
-use tinympc::world::{MAX_THRUST, World};
 
 // TODO: get the constants from generate_physics_data.rs
 const MAX_POS_X: f32 = 80.0; // Min pos x is 0

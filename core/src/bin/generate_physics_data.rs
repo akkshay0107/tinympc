@@ -1,11 +1,11 @@
 use std::f32::consts::PI;
-
+// TODO: fix imports to not be hardcoded to crate name
+use core::record::Record;
+use core::world::{MAX_THRUST, World};
 use macroquad::prelude::*;
 use macroquad::rand::gen_range;
 use rapier2d::na::Isometry2;
 use rapier2d::prelude::*;
-use tinympc::record::Record;
-use tinympc::world::{MAX_THRUST, World};
 
 const EXPECTED_TRAJ_SIZE: usize = 200; // roughly 3s per trajectory at 60 fps
 const NUM_TRAJECTORIES: usize = 4000;
