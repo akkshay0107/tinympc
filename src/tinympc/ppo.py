@@ -41,16 +41,21 @@ class ActorCritic(nn.Module):
         std = self.actor_log_std.exp().expand_as(mean)
         dist = Normal(mean, std)
 
-        if action is None:
-            action = dist.sample()
+        if action is None:  # During rollout
+            raw_action = dist.sample()
+            env_action = torch.tanh(raw_action)
+            env_action = (env_action + 1.0) / 2.0
+        else:  # During update, action is from buffer
+            env_action = action
+            # Need to get the pre_tanh_action that would produce it
+            # Clamp atanh for numerical stability
+            tanh_action = action * 2.0 - 1.0
+            raw_action = torch.atanh(torch.clamp(tanh_action, -0.999999, 0.999999))
 
-        # Apply tanh squashing to [-1,1] and normalize to [0,1]
-        action = torch.tanh(action)
-        action = (action + 1.0) / 2.0
-        log_prob = dist.log_prob(action).sum(-1)
+        log_prob = dist.log_prob(raw_action).sum(-1)
         entropy = dist.entropy().sum(-1)
 
-        return action, log_prob, entropy, value
+        return env_action, log_prob, entropy, value
 
 class PPO:
     def __init__(self, state_dim, action_dim, lr=3e-4, gamma=0.99, gae_lambda=0.95,
@@ -103,7 +108,7 @@ class PPO:
             ):
                 action_new, log_prob, entropy, value = self.policy.act(state, action)
 
-                # Calculate ratio (pi_theta / pi_theta_old)
+                # pi_theta / pi_theta_old
                 ratio = (log_prob - old_log_prob).exp()
 
                 # Surrogate loss
@@ -114,7 +119,7 @@ class PPO:
                 policy_loss = -torch.min(surr1, surr2).mean()
 
                 # Value loss
-                value_loss = F.mse_loss(return_, value)
+                value_loss = F.mse_loss(return_, value.squeeze(-1))
 
                 # Entropy bonus
                 entropy_loss = -entropy.mean()
@@ -122,7 +127,6 @@ class PPO:
                 # Total loss
                 loss = policy_loss + 0.5 * value_loss + 0.01 * entropy_loss
 
-                # Optimize
                 self.optimizer.zero_grad()
                 loss.backward()
                 nn.utils.clip_grad_norm_(self.policy.parameters(), 0.5)
