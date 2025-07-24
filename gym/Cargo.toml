@@ -3,6 +3,10 @@ name = "gym"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "gym"
+crate-type = ["cdylib"]
+
 [dependencies]
 core = { path = "../core" }
 pyo3 = { version = "0.24", features = ["extension-module"] }
