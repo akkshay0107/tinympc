@@ -1,8 +1,4 @@
 /target
-*.pdf
-*.csv
-training_config.json
-/runs
-/data
-/plots
-*.pyc
+.*
+!.gitignore
+/python/runs
