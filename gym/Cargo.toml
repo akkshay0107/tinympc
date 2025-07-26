@@ -8,5 +8,8 @@ name = "gym"
 crate-type = ["cdylib"]
 
 [dependencies]
-core = { path = "../core" }
+base = { path = "../base" }
 pyo3 = { version = "0.24", features = ["extension-module"] }
+
+[package.metadata.maturin]
+module-name = "gym"

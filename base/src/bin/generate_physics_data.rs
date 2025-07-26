@@ -1,7 +1,7 @@
 use std::f32::consts::PI;
 // TODO: fix imports to not be hardcoded to crate name
-use core::record::Record;
-use core::world::{MAX_THRUST, World};
+use base::record::Record;
+use base::world::{MAX_THRUST, World};
 use macroquad::prelude::*;
 use macroquad::rand::gen_range;
 use rapier2d::na::Isometry2;

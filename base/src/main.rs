@@ -1,6 +1,6 @@
 // TODO: fix imports to not be hardcoded to crate name
-use core::game::{DRAG_POINTER_COLOR, DRAG_POINTER_RADIUS, Game};
-use core::world::{World, pixel_to_world, world_to_pixel};
+use base::game::{DRAG_POINTER_COLOR, DRAG_POINTER_RADIUS, Game};
+use base::world::{World, pixel_to_world, world_to_pixel};
 use macroquad::prelude::*;
 use rapier2d::prelude::*;
 

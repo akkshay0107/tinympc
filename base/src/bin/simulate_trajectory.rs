@@ -1,6 +1,6 @@
 use std::f32::consts::PI;
 // TODO: fix imports to not be hardcoded to crate name
-use core::world::{MAX_THRUST, World};
+use base::world::{MAX_THRUST, World};
 use macroquad::prelude::*;
 use rapier2d::prelude::*;
 use std::env;
