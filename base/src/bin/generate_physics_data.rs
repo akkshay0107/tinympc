@@ -1,5 +1,6 @@
 use std::f32::consts::PI;
 // TODO: fix imports to not be hardcoded to crate name
+use base::constants::*;
 use base::record::Record;
 use base::world::{MAX_THRUST, World};
 use macroquad::prelude::*;
@@ -9,17 +10,6 @@ use rapier2d::prelude::*;
 
 const EXPECTED_TRAJ_SIZE: usize = 200; // roughly 3s per trajectory at 60 fps
 const NUM_TRAJECTORIES: usize = 4000;
-
-const MAX_POS_X: f32 = 80.0; // Min pos x is 0
-const _MIN_POS_Y: f32 = 2.0; // COM of vertical rocket is at 2.0 when it touches the ground
-const MAX_POS_Y: f32 = 45.0;
-const MAX_ANGLE_DEFLECTION: f32 = PI / 12.0;
-const MAX_VX: f32 = 5.0;
-const MIN_VY: f32 = -2.0;
-const MAX_VY: f32 = 5.0;
-const MAX_ANGULAR_VELOCITY: f32 = 0.3;
-
-const GROUND_THRESHOLD: f32 = 1.99; // Slightly under min possible y
 
 fn get_balanced_velocity(x: f32) -> ((f32, f32), f32) {
     let angvel: f32 = rand::gen_range(-MAX_ANGULAR_VELOCITY, MAX_ANGULAR_VELOCITY);
