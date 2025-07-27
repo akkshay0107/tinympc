@@ -80,14 +80,11 @@ impl PyEnvironment {
         let ang_vel_penalty = -0.1 * omega.powi(2); // Enforcing larger penalty on angle to allow rocket to correct angle using angvel
         let time_penalty = -0.02;
 
-        let crash_landing_penalty = if self._is_crash_landing(x, y, theta, vx, vy, omega) {
-            -1e4 // Needs to be larger than the largest valid penalty
-        } else {
-            0.0
-        };
-
-        let landing_bonus = if self._is_successful_landing(x, y, theta, vx, vy, omega) {
-            1e4 // Arbitrarily picked
+        // Changed so that crash landing and successful landing is mutually exclusive
+        let landing_bonus = if self._is_crash_landing(x, y, theta, vx, vy, omega) {
+            -1e4 // Should be larger than any valid penalty
+        } else if self._is_successful_landing(x, y, theta, vx, vy, omega) {
+            1e3 // Arbitrary
         } else {
             0.0
         };
@@ -98,7 +95,6 @@ impl PyEnvironment {
             + angle_penalty
             + ang_vel_penalty
             + time_penalty
-            + crash_landing_penalty
             + landing_bonus
     }
 

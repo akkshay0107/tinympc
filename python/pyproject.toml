@@ -28,6 +28,10 @@ priority = "supplemental"
 venvPath = "."
 venv = ".venv"
 
+[tool.maturin]
+bindings = "pyo3"
+module-name = "tinympc.gym"
+
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["maturin>=1.9.1,<2.0.0"]
+build-backend = "maturin"
