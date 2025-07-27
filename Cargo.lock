@@ -414,6 +414,8 @@ version = "0.1.0"
 dependencies = [
  "base",
  "pyo3",
+ "rand",
+ "rapier2d",
 ]
 
 [[package]]

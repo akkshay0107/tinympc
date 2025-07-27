@@ -20,6 +20,7 @@ fn get_balanced_velocity(x: f32) -> ((f32, f32), f32) {
     ((vx, vy), angvel)
 }
 
+// TODO: fix this code to now generate normalized thruster inputs
 fn get_balanced_thrusters(state: (f32, f32, f32), dominant: bool) -> (f32, f32) {
     let x_center = MAX_POS_X / 2.0;
     let x_bias = (x_center - state.0) / x_center;

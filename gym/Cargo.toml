@@ -10,6 +10,8 @@ crate-type = ["cdylib"]
 [dependencies]
 base = { path = "../base" }
 pyo3 = { version = "0.24", features = ["extension-module"] }
+rapier2d = { version = "0.26.1", features = ["simd-stable"] }
+rand = "0.9.1"
 
 [package.metadata.maturin]
 module-name = "gym"

@@ -136,8 +136,10 @@ impl World {
     }
 
     pub fn apply_thruster_forces(&mut self, left_thruster_input: f32, right_thruster_input: f32) {
-        let left_thruster = left_thruster_input.clamp(0.0, MAX_THRUST);
-        let right_thruster = right_thruster_input.clamp(0.0, MAX_THRUST);
+        // Left and right thruster inputs assumed to be normalized
+        // if not then force into [0, 1]
+        let left_thruster = left_thruster_input.clamp(0.0, 1.0) * MAX_THRUST;
+        let right_thruster = right_thruster_input.clamp(0.0, 1.0) * MAX_THRUST;
 
         if left_thruster == 0.0 && right_thruster == 0.0 {
             return;

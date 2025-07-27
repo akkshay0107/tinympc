@@ -24,7 +24,6 @@ class ActorCritic(nn.Module):
         # Critic head - outputs state value
         self.critic = nn.Linear(128, 1)
 
-        # Initialize weights
         self.apply(self._init_weights)
 
     def _init_weights(self, module):
@@ -48,9 +47,12 @@ class ActorCritic(nn.Module):
         else:  # During update, action is from buffer
             env_action = action
             # Need to get the pre_tanh_action that would produce it
-            # Clamp atanh for numerical stability
             tanh_action = action * 2.0 - 1.0
-            raw_action = torch.atanh(torch.clamp(tanh_action, -0.999999, 0.999999))
+            # Clamp to prevent NaNs in log
+            eps = torch.finfo(tanh_action.dtype).eps
+            tanh_action = torch.clamp(tanh_action, -1.0 + eps, 1.0 - eps)
+            # Stable atanh using log1p
+            raw_action = 0.5 * (torch.log1p(tanh_action) - torch.log1p(-tanh_action))
 
         log_prob = dist.log_prob(raw_action).sum(-1)
         entropy = dist.entropy().sum(-1)
