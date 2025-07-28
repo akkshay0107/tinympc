@@ -4,7 +4,6 @@ version = "0.1.0"
 description = "Neural network based MPC controller for a rocket landing scenario"
 authors = ["Akkshay Sundara Rajan <sundar57@purdue.edu>"]
 readme = "../README.md"
-requires-python = ">=3.12"
 package-mode = false
 
 [tool.poetry.dependencies]
@@ -30,7 +29,7 @@ venv = ".venv"
 
 [tool.maturin]
 bindings = "pyo3"
-module-name = "tinympc.gym"
+manifest-path = "../gym/Cargo.toml"
 
 [build-system]
 requires = ["maturin>=1.9.1,<2.0.0"]

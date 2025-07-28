@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Normal
 import numpy as np
+from gym import PyEnvironment
 
 class ActorCritic(nn.Module):
     def __init__(self, state_dim, action_dim):
@@ -151,7 +152,11 @@ def main():
     action_dim = 2 # [T_L, T_R] (normalized to [0,1])
 
     agent = PPO(state_dim, action_dim)
-    pass
+    env = PyEnvironment(
+        max_steps = 100
+    )
+
+    print("Successful imports")
 
 if __name__ == "__main__":
     main()
