@@ -147,16 +147,99 @@ class PPO:
             action, _, _, _ = self.policy.act(state)
             return action.squeeze(0).cpu().numpy()
 
-def main():
-    state_dim = 6 # [x, y, theta, x dot, y dot, theta dot]
-    action_dim = 2 # [T_L, T_R] (normalized to [0,1])
+def gather_trajectory(agent, env, horizon, device):
+    state = env.reset()
+    states = []
+    actions = []
+    log_probs = []
+    rewards = []
+    values = []
+    masks = []
 
-    agent = PPO(state_dim, action_dim)
-    env = PyEnvironment(
-        max_steps = 100
+    for _ in range(horizon):
+        state_tensor = torch.FloatTensor(state).unsqueeze(0).to(device)
+        with torch.no_grad():
+            action_tensor, log_prob, _, value = agent.policy.act(state_tensor)
+            action = action_tensor.squeeze(0).cpu().numpy()
+            log_prob = log_prob.cpu().numpy()
+            value = value.item()
+
+        next_state, reward, done = env.step(action)
+
+        # All must be arrays or lists for later stacking
+        states.append(state)
+        actions.append(action)
+        log_probs.append(log_prob)
+        rewards.append(reward)
+        values.append(value)
+        masks.append(1.0 - float(done))  # mask = !done
+
+        state = next_state
+        if done:
+            state = env.reset()
+
+    state_tensor = torch.FloatTensor(state).unsqueeze(0).to(device)
+    with torch.no_grad():
+        _, next_value = agent.policy(state_tensor)
+    return (
+        np.array(states, dtype=np.float32),
+        np.array(actions, dtype=np.float32),
+        np.array(log_probs, dtype=np.float32),
+        np.array(rewards, dtype=np.float32),
+        np.array(values, dtype=np.float32),
+        np.array(masks, dtype=np.float32),
+        next_value.item()
     )
 
-    print("Successful imports")
+def train():
+    state_dim = 6
+    action_dim = 2
+    agent = PPO(state_dim, action_dim)
+    env = PyEnvironment(max_steps=1000)
+    device = agent.device
+
+    NUM_UPDATES = 1000
+    TIMESTEPS_PER_ROLLOUT = 2 * env.max_steps
+    EVAL_EVERY = 50
+
+    for update in range(NUM_UPDATES):
+        (
+            states, actions, log_probs, rewards, values, masks, next_value
+        ) = gather_trajectory(agent, env, TIMESTEPS_PER_ROLLOUT, device)
+
+        returns = agent.compute_gae(next_value, rewards.tolist(), masks.tolist(), values.tolist())
+        returns = torch.tensor(returns, dtype=torch.float32)
+        advantages = returns - torch.tensor(values, dtype=torch.float32)
+
+        # Normalize advantages for stability
+        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+
+        states = torch.tensor(states, dtype=torch.float32)
+        actions = torch.tensor(actions, dtype=torch.float32)
+        log_probs = torch.tensor(log_probs, dtype=torch.float32)
+        # returns, advantages already set to tensors
+
+        # PPO update
+        agent.update((states, actions, log_probs, returns, advantages))
+
+        if (update + 1) % EVAL_EVERY == 0:
+            reward = evaluate(agent, env, episodes=5)
+            print(f"Update {update+1}: Mean Eval Reward {reward:.3f}")
+
+def evaluate(agent, env, episodes=5):
+    total_reward = 0.0
+    for ep in range(episodes):
+        state = env.reset()
+        ep_reward = 0.0
+        done = False
+        for _ in range(env.max_steps):
+            action = agent.act(state)
+            state, reward, done = env.step(action)
+            ep_reward += reward
+            if done:
+                break
+        total_reward += ep_reward
+    return total_reward / episodes
 
 if __name__ == "__main__":
-    main()
+    train()

@@ -24,10 +24,15 @@ impl PyEnvironment {
         }
     }
 
-    // world doesn't need a getter and max steps defined in python
+    // world doesn't need a getter
     #[getter]
-    pub fn steps(&self) -> PyResult<u32> {
+    pub fn get_steps(&self) -> PyResult<u32> {
         Ok(self.steps)
+    }
+
+    #[getter]
+    pub fn get_max_steps(&self) -> PyResult<u32> {
+        Ok(self.max_steps)
     }
 
     pub fn reset(&mut self) -> PyResult<[f32; 6]> {
