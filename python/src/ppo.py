@@ -223,21 +223,26 @@ def train():
         agent.update((states, actions, log_probs, returns, advantages))
 
         if (update + 1) % EVAL_EVERY == 0:
-            reward = evaluate(agent, env, episodes=5)
+            reward = evaluate(agent, env, episodes=5, debug=True)
             print(f"Update {update+1}: Mean Eval Reward {reward:.3f}")
 
-def evaluate(agent, env, episodes=5):
+def evaluate(agent, env, episodes=5, debug=False):
     total_reward = 0.0
     for ep in range(episodes):
         state = env.reset()
         ep_reward = 0.0
         done = False
-        for _ in range(env.max_steps):
+        steps = 0
+        while not done:
             action = agent.act(state)
+            if debug:
+                print(f"Step {steps}: Action={action}")
             state, reward, done = env.step(action)
+            if debug:
+                print(f"Step {steps}: State={state}, Reward={reward}, Done={done}")
             ep_reward += reward
-            if done:
-                break
+            steps += 1
+        print(f"Episode {ep}: Total reward = {ep_reward:.2f} in {steps} steps")
         total_reward += ep_reward
     return total_reward / episodes
 

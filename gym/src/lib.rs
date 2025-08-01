@@ -80,7 +80,6 @@ impl PyEnvironment {
 
         let dist_penalty = -2.0 * dy.powi(2); // Allowing landing on any valid x
         let descent_penalty = -vy.powi(2);
-        let horizontal_movement_penalty = -vx.powi(4); // Want to highly discourage haivng a large horizontal velocity
         let angle_penalty = -5.0 * theta.powi(2);
         let ang_vel_penalty = -0.1 * omega.powi(2); // Enforcing larger penalty on angle to allow rocket to correct angle using angvel
         let time_penalty = -0.02;
@@ -89,14 +88,13 @@ impl PyEnvironment {
         let landing_bonus = if self._is_crash_landing(x, y, theta, vx, vy, omega) {
             -1e4 // Should be larger than any valid penalty
         } else if self._is_successful_landing(x, y, theta, vx, vy, omega) {
-            1e3 // Arbitrary
+            1e4 // Arbitrary
         } else {
             0.0
         };
 
         dist_penalty
             + descent_penalty
-            + horizontal_movement_penalty
             + angle_penalty
             + ang_vel_penalty
             + time_penalty
