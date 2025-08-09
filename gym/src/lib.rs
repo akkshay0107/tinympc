@@ -79,8 +79,7 @@ impl PyEnvironment {
         let next_state = [x, y, theta, vx, vy, omega];
 
         let done = self.is_done(x, y);
-        let reward =
-            self.calculate_reward(x, y, theta, vx, vy, omega, left_thrust, right_thrust, done);
+        let reward = self.calculate_reward(x, y, theta, vx, vy, omega, left_thrust, right_thrust);
 
         self.prev_y = y;
 
@@ -97,7 +96,6 @@ impl PyEnvironment {
         omega: f32,
         left_thrust: f32,
         right_thrust: f32,
-        done: bool,
     ) -> f32 {
         // Landing at any valid x is fine
         // No x based rewards
@@ -115,20 +113,22 @@ impl PyEnvironment {
         };
 
         let upper_exit_penalty = if self.steps > 1 && y > MAX_POS_Y {
-            -1e7
+            -1e6
         } else {
             0.0
         };
 
-        let landing_bonus = if done && self._is_crash_landing(x, y, theta, vx, vy, omega) {
-            -1e7
-        } else if done && self._is_successful_landing(x, y, theta, vx, vy, omega) {
+        let landing_bonus = if self._is_crash_landing(x, y, theta, vx, vy, omega) {
+            -1e6
+        } else if self._is_successful_landing(x, y, theta, vx, vy, omega) {
             1e6
         } else {
             0.0
         };
 
         let thrust_penalty = -1e3 * (left_thrust.powi(2) + right_thrust.powi(2)); // Deter model from using full thrust at all times
+
+        let time_penalty = -0.1;
 
         dist_penalty
             + descent_penalty
@@ -138,6 +138,7 @@ impl PyEnvironment {
             + landing_bonus
             + upper_exit_penalty
             + thrust_penalty
+            + time_penalty
     }
 
     fn is_done(&self, x: f32, y: f32) -> bool {
@@ -172,7 +173,7 @@ impl PyEnvironment {
     fn _is_crash_landing(&self, x: f32, y: f32, theta: f32, vx: f32, vy: f32, omega: f32) -> bool {
         let landed = y <= _MIN_POS_Y;
         let horizontal_out = x <= 0.0 || x >= MAX_POS_X;
-        let vertical_out = y <= GROUND_THRESHOLD || y >= MAX_POS_Y;
+        let vertical_out = y >= MAX_POS_Y;
         let bad_angle = theta.abs() > MAX_LANDING_ANGLE;
         let fast_land = vy.abs() > MAX_LANDING_VY;
         let fast_horiz = vx.abs() > MAX_LANDING_VX;

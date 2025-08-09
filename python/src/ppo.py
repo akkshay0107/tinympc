@@ -1,254 +1,220 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
+from torch.optim import Adam
 from torch.distributions import Normal
 import numpy as np
 from gym import PyEnvironment
 
-class ActorCritic(nn.Module):
-    def __init__(self, state_dim, action_dim):
-        super(ActorCritic, self).__init__()
+MIN_LOG_STD = -7 # Prevent collapse of std under 1e-3
 
-        # Shared network layers
-        self.shared_layers = nn.Sequential(
-            nn.Linear(state_dim, 256),
-            nn.ReLU(),
-            nn.Linear(256, 128),
-            nn.ReLU()
+class PolicyNet(nn.Module):
+    def __init__(self, obs_dim, act_dim):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(obs_dim, 64), nn.Tanh(),
+            nn.Linear(64, 64), nn.Tanh(),
+        )
+        self.mean_layer = nn.Linear(64, act_dim)
+        self.log_std = nn.Parameter(torch.zeros(act_dim))  # std is learnable
+
+    def forward(self, obs):
+        x = self.net(obs)
+        mean = self.mean_layer(x)
+        std = torch.exp(self.log_std)
+        return mean, std
+
+    def get_dist(self, obs):
+        mean, std = self.forward(obs)
+        return Normal(mean, std)
+
+class ValueNet(nn.Module):
+    def __init__(self, obs_dim):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(obs_dim, 64), nn.Tanh(),
+            nn.Linear(64, 64), nn.Tanh(),
+            nn.Linear(64, 1),
         )
 
-        # Actor head - outputs mean and log_std for each action dimension
-        self.actor_mean = nn.Linear(128, action_dim)
-        self.actor_log_std = nn.Parameter(torch.zeros(1, action_dim))
+    def forward(self, obs):
+        return self.net(obs).squeeze(-1)
 
-        # Critic head - outputs state value
-        self.critic = nn.Linear(128, 1)
+def compute_gae(rewards, values, dones, gamma=0.99, lam=0.95):
+    advantages = []
+    gae = 0
+    values = values + [0]
+    for t in reversed(range(len(rewards))):
+        delta = rewards[t] + gamma * values[t + 1] * (1 - dones[t]) - values[t]
+        gae = delta + gamma * lam * (1 - dones[t]) * gae
+        advantages.insert(0, gae)
+    return advantages
 
-        self.apply(self._init_weights)
-
-    def _init_weights(self, module):
-        if isinstance(module, nn.Linear):
-            nn.init.orthogonal_(module.weight, gain=1)
-            nn.init.constant_(module.bias, 0)
-
-    def forward(self, state):
-        shared = self.shared_layers(state)
-        return self.actor_mean(shared), self.critic(shared)
-
-    def act(self, state, action=None):
-            mean, value = self.forward(state)
-            std = self.actor_log_std.exp().expand_as(mean)
-            dist = Normal(mean, std)
-
-            if action is None:
-                # Rollout sample
-                raw_action = dist.rsample()
-                tanh_action = torch.tanh(raw_action)
-                env_action = (tanh_action + 1.0) / 2.0
-
-                # Tanh change-of-variable correction
-                log_prob = dist.log_prob(raw_action).sum(-1)
-                log_prob -= (2 * (np.log(2) - raw_action - F.softplus(-2 * raw_action))).sum(-1)
-            else:
-                # PPO update, action is from buffer, already in [0,1]
-                tanh_action = action * 2.0 - 1.0
-                eps = torch.finfo(tanh_action.dtype).eps
-                tanh_action = torch.clamp(tanh_action, -1.0 + eps, 1.0 - eps)
-                # Stable atanh calc
-                raw_action = 0.5 * (torch.log1p(tanh_action) - torch.log1p(-tanh_action))
-                log_prob = dist.log_prob(raw_action).sum(-1)
-                log_prob -= (2 * (np.log(2) - raw_action - F.softplus(-2 * raw_action))).sum(-1)
-                env_action = action
-
-            entropy = dist.entropy().sum(-1)
-            return env_action, log_prob, entropy, value
-
-class PPO:
-    def __init__(self, state_dim, action_dim, lr=3e-4, gamma=0.99, gae_lambda=0.95,
-                 clip_param=0.2, ppo_epochs=10, batch_size=64):
-        self.device = torch.device("cpu") # only torch-cpu installed in project
+class PPOAgent:
+    def __init__(self, env, gamma=0.99, lam=0.95, clip_eps=0.2, lr=3e-4, epochs=10, batch_size=64):
+        self.env = env
+        self.obs_dim = 6
+        self.act_dim = 2
         self.gamma = gamma
-        self.gae_lambda = gae_lambda
-        self.clip_param = clip_param
-        self.ppo_epochs = ppo_epochs
+        self.lam = lam
+        self.clip_eps = clip_eps
+        self.epochs = epochs
         self.batch_size = batch_size
 
-        self.policy = ActorCritic(state_dim, action_dim).to(self.device)
-        self.optimizer = optim.Adam(self.policy.parameters(), lr=lr)
+        self.policy = PolicyNet(self.obs_dim, self.act_dim)
+        self.value = ValueNet(self.obs_dim)
+        self.policy_optim = Adam(self.policy.parameters(), lr=lr)
+        self.value_optim = Adam(self.value.parameters(), lr=lr)
 
-    def compute_gae(self, next_value, rewards, masks, values):
-        values = values + [next_value]
-        gae = 0
-        returns = []
+    @staticmethod
+    def _squash_action(raw_action):
+        squashed = torch.tanh(raw_action)
+        return (squashed + 1) / 2  # [-1, 1] to [0, 1]
 
-        for step in reversed(range(len(rewards))):
-            delta = rewards[step] + self.gamma * values[step + 1] * masks[step] - values[step]
-            gae = delta + self.gamma * self.gae_lambda * masks[step] * gae
-            returns.insert(0, gae + values[step])
+    @staticmethod
+    def _unsquash_action(bounded_action):
+        # action from buffer, already in [0,1]
+        tanh_action = bounded_action * 2.0 - 1.0
+        eps = torch.finfo(tanh_action.dtype).eps
+        tanh_action = torch.clamp(tanh_action, -1.0 + eps, 1.0 - eps)
+        # Stable atanh calc
+        return 0.5 * (torch.log1p(tanh_action) - torch.log1p(-tanh_action))
 
-        return returns
+    @staticmethod
+    def _tanh_log_prob(dist, raw_action, squashed_action):
+        log_prob = dist.log_prob(raw_action) - torch.log(1 - squashed_action.pow(2) + 1e-6)
+        return log_prob.sum(dim=-1)
 
-    def ppo_iter(self, states, actions, log_probs, returns, advantages):
-        batch_size = states.size(0)
-        indices = np.arange(batch_size)
-        np.random.shuffle(indices)
+    def select_action(self, obs):
+        obs_t = torch.FloatTensor(obs).unsqueeze(0)
+        dist = self.policy.get_dist(obs_t)
+        raw_action = dist.rsample()
+        action = self._squash_action(raw_action)
+        log_prob = self._tanh_log_prob(dist, raw_action, torch.tanh(raw_action))
+        return action.detach().numpy()[0], log_prob.detach()
 
-        for start in range(0, batch_size, self.batch_size):
-            end = start + self.batch_size
-            batch_indices = indices[start:end]
+    def evaluate_action(self, obs, action):
+        raw_action = self._unsquash_action(action)
+        dist = self.policy.get_dist(obs)
+        squashed = torch.tanh(raw_action)
+        log_prob = self._tanh_log_prob(dist, raw_action, squashed)
+        entropy = dist.entropy().sum(dim=-1)
+        value = self.value(obs)
+        return log_prob, entropy, value
 
-            yield (
-                states[batch_indices],
-                actions[batch_indices],
-                log_probs[batch_indices],
-                returns[batch_indices],
-                advantages[batch_indices]
-            )
+    def collect_trajectories(self, horizon=2048):
+        obs = self.env.reset()
+        observations, actions, rewards, dones, log_probs, values = [], [], [], [], [], []
 
-    def update(self, rollouts):
-        states, actions, old_log_probs, returns, advantages = rollouts
+        for _ in range(horizon):
+            obs_t = torch.FloatTensor(obs).unsqueeze(0)
+            dist = self.policy.get_dist(obs_t)
+            value = self.value(obs_t).item()
 
-        for _ in range(self.ppo_epochs):
-            for state, action, old_log_prob, return_, advantage in self.ppo_iter(
-                states, actions, old_log_probs, returns, advantages
-            ):
-                action_new, log_prob, entropy, value = self.policy.act(state, action)
+            action = dist.rsample()
+            log_prob = dist.log_prob(action).sum(dim=-1).item()
 
-                # pi_theta / pi_theta_old
-                ratio = (log_prob - old_log_prob).exp()
+            next_obs, reward, done = self.env.step(action.detach().numpy().flatten())
 
-                # Surrogate loss
-                surr1 = ratio * advantage
-                surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * advantage
+            observations.append(obs)
+            actions.append(action.detach().numpy()[0])
+            rewards.append(reward)
+            dones.append(done)
+            log_probs.append(log_prob)
+            values.append(value)
 
-                # Policy loss
-                policy_loss = -torch.min(surr1, surr2).mean()
+            obs = next_obs
 
-                # Value loss
-                value_loss = F.mse_loss(return_, value.squeeze(-1))
+            if done:
+                obs = self.env.reset()
 
-                # Entropy bonus
-                entropy_loss = -entropy.mean()
+        return observations, actions, rewards, dones, log_probs, values
 
-                # Total loss
-                loss = policy_loss + 0.5 * value_loss + 0.01 * entropy_loss
+    def train(self, total_timesteps):
+        timestep = 0
+        while timestep < total_timesteps:
+            obs_batch, act_batch, rew_batch, done_batch, logp_batch, val_batch = self.collect_trajectories()
+            timestep += len(rew_batch)
 
-                self.optimizer.zero_grad()
-                loss.backward()
-                nn.utils.clip_grad_norm_(self.policy.parameters(), 0.5)
-                self.optimizer.step()
+            advantages = compute_gae(rew_batch, val_batch, done_batch, self.gamma, self.lam)
+            returns = [adv + val for adv, val in zip(advantages, val_batch)]
 
-    def get_value(self, state):
-        with torch.no_grad():
-            state = torch.FloatTensor(state).unsqueeze(0).to(self.device)
-            _, value = self.policy(state)
-            return value.cpu().numpy()[0]
+            obs_tensor = torch.as_tensor(np.array(obs_batch), dtype=torch.float32)
+            act_tensor = torch.as_tensor(np.array(act_batch), dtype=torch.float32)
+            ret_tensor = torch.as_tensor(np.array(returns), dtype=torch.float32)
+            adv_tensor = torch.as_tensor(np.array(advantages), dtype=torch.float32)
+            old_logp_tensor = torch.as_tensor(np.array(logp_batch), dtype=torch.float32)
 
-    def act(self, state):
-        with torch.no_grad():
-            state = torch.FloatTensor(state).unsqueeze(0).to(self.device)
-            action, _, _, _ = self.policy.act(state)
-            return action.squeeze(0).cpu().numpy()
 
-def gather_trajectory(agent, env, horizon, device):
-    state = env.reset()
-    states = []
-    actions = []
-    log_probs = []
-    rewards = []
-    values = []
-    masks = []
+            # Normalize advantages
+            adv_tensor = (adv_tensor - adv_tensor.mean()) / (adv_tensor.std() + 1e-8) # eps for DBZ
 
-    for _ in range(horizon):
-        state_tensor = torch.FloatTensor(state).unsqueeze(0).to(device)
-        with torch.no_grad():
-            action_tensor, log_prob, _, value = agent.policy.act(state_tensor)
-            action = action_tensor.squeeze(0).cpu().numpy()
-            log_prob = log_prob.cpu().numpy()
-            value = value.item()
+            # PPO update for given epochs
+            for _ in range(self.epochs):
+                for idx in range(0, len(obs_batch), self.batch_size):
+                    slice_idx = slice(idx, idx + self.batch_size)
+                    obs_b = obs_tensor[slice_idx]
+                    act_b = act_tensor[slice_idx]
+                    ret_b = ret_tensor[slice_idx]
+                    adv_b = adv_tensor[slice_idx]
+                    old_logp_b = old_logp_tensor[slice_idx]
 
-        next_state, reward, done = env.step(action)
+                    new_logp, entropy, value = self.evaluate_action(obs_b, act_b)
+                    ratio = torch.exp(new_logp - old_logp_b)
 
-        # All must be arrays or lists for later stacking
-        states.append(state)
-        actions.append(action)
-        log_probs.append(log_prob)
-        rewards.append(reward)
-        values.append(value)
-        masks.append(1.0 - float(done))  # mask = !done
+                    # PPO clipped objective
+                    clip_adv = torch.clamp(ratio, 1 - self.clip_eps, 1 + self.clip_eps) * adv_b
+                    policy_loss = -torch.min(ratio * adv_b, clip_adv).mean()
+                    value_loss = nn.MSELoss()(value, ret_b)
+                    entropy_bonus = entropy.mean()
 
-        state = next_state
-        if done:
-            state = env.reset()
+                    total_loss = policy_loss + 0.5 * value_loss - 0.1 * entropy_bonus
 
-    state_tensor = torch.FloatTensor(state).unsqueeze(0).to(device)
-    with torch.no_grad():
-        _, next_value = agent.policy(state_tensor)
-    return (
-        np.array(states, dtype=np.float32),
-        np.array(actions, dtype=np.float32),
-        np.array(log_probs, dtype=np.float32),
-        np.array(rewards, dtype=np.float32),
-        np.array(values, dtype=np.float32),
-        np.array(masks, dtype=np.float32),
-        next_value.item()
+                    self.policy_optim.zero_grad()
+                    self.value_optim.zero_grad()
+                    total_loss.backward()
+                    self.policy_optim.step()
+                    self.value_optim.step()
+
+            print(f'Timesteps: {timestep}, Policy Loss: {policy_loss.item():.3f}, Value Loss: {value_loss.item():.3f}')
+
+def main():
+    env = PyEnvironment(1000)
+    agent = PPOAgent(
+        env,
+        gamma=0.99,
+        lam=0.95,
+        clip_eps=0.2,
+        lr=3e-4,
+        epochs=10,
+        batch_size=64
     )
 
-def train():
-    state_dim = 6
-    action_dim = 2
-    agent = PPO(state_dim, action_dim)
-    env = PyEnvironment(max_steps=1000)
-    device = agent.device
+    total_timesteps = 10_000
 
-    NUM_UPDATES = 1000
-    TIMESTEPS_PER_ROLLOUT = 2 * env.max_steps
-    EVAL_EVERY = 50
+    print("Training started.")
+    agent.train(total_timesteps)
+    print("Training completed.")
 
-    for update in range(NUM_UPDATES):
-        (
-            states, actions, log_probs, rewards, values, masks, next_value
-        ) = gather_trajectory(agent, env, TIMESTEPS_PER_ROLLOUT, device)
+    # torch.save(agent.policy.state_dict(), "ppo_policy.pth")
+    # torch.save(agent.value.state_dict(), "ppo_value.pth")
+    # print("Model weights saved to pth files.")
 
-        returns = agent.compute_gae(next_value, rewards.tolist(), masks.tolist(), values.tolist())
-        returns = torch.tensor(returns, dtype=torch.float32)
-        advantages = returns - torch.tensor(values, dtype=torch.float32)
+    # Test episode
+    obs = env.reset()
+    done = False
+    step = 1
+    while not done:
+        obs_t = torch.FloatTensor(obs).unsqueeze(0)
+        mean, _ = agent.policy.forward(obs_t)
+        mean = mean[0]  # shape: (2,)
+        squashed = torch.tanh(mean)
+        action = ((squashed + 1) / 2).detach().numpy()  # ensure [0, 1]
+        obs, reward, done = env.step(action)
+        thrust = action.tolist()
+        print(f"{step=} {obs=} {thrust=} {reward=}")
+        step += 1
 
-        # Normalize advantages for stability
-        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
-
-        states = torch.tensor(states, dtype=torch.float32)
-        actions = torch.tensor(actions, dtype=torch.float32)
-        log_probs = torch.tensor(log_probs, dtype=torch.float32)
-        # returns, advantages already set to tensors
-
-        # PPO update
-        agent.update((states, actions, log_probs, returns, advantages))
-
-        if (update + 1) % EVAL_EVERY == 0:
-            reward = evaluate(agent, env, episodes=5, debug=True)
-            print(f"Update {update+1}: Mean Eval Reward {reward:.3f}")
-
-def evaluate(agent, env, episodes=5, debug=False):
-    total_reward = 0.0
-    for ep in range(episodes):
-        state = env.reset()
-        ep_reward = 0.0
-        done = False
-        steps = 0
-        while not done:
-            action = agent.act(state)
-            if debug:
-                print(f"Step {steps}: Action={action}")
-            state, reward, done = env.step(action)
-            if debug:
-                print(f"Step {steps}: State={state}, Reward={reward}, Done={done}")
-            ep_reward += reward
-            steps += 1
-        print(f"Episode {ep}: Total reward = {ep_reward:.2f} in {steps} steps")
-        total_reward += ep_reward
-    return total_reward / episodes
+    print("Test episode completed.")
 
 if __name__ == "__main__":
-    train()
+    main()
