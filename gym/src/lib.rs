@@ -79,7 +79,8 @@ impl PyEnvironment {
         let next_state = [x, y, theta, vx, vy, omega];
 
         let done = self.is_done(x, y);
-        let reward = self.calculate_reward(x, y, theta, vx, vy, omega, done);
+        let reward =
+            self.calculate_reward(x, y, theta, vx, vy, omega, left_thrust, right_thrust, done);
 
         self.prev_y = y;
 
@@ -94,6 +95,8 @@ impl PyEnvironment {
         vx: f32,
         vy: f32,
         omega: f32,
+        left_thrust: f32,
+        right_thrust: f32,
         done: bool,
     ) -> f32 {
         // Landing at any valid x is fine
@@ -106,24 +109,26 @@ impl PyEnvironment {
         let ang_vel_penalty = -0.1 * omega.powi(2); // Enforcing larger penalty on angle to allow rocket to correct angle using angvel
 
         let downward_progress_reward = if self.steps > 1 && self.prev_y > y {
-            10.0 * (MAX_SAFE_Y - y)
+            10.0 * (self.prev_y - y)
         } else {
             0.0
         };
 
-        let upper_exit_penalty = if self.steps > 1 && y > MAX_SAFE_Y {
+        let upper_exit_penalty = if self.steps > 1 && y > MAX_POS_Y {
             -1e7
         } else {
             0.0
         };
 
         let landing_bonus = if done && self._is_crash_landing(x, y, theta, vx, vy, omega) {
-            -1e6
+            -1e7
         } else if done && self._is_successful_landing(x, y, theta, vx, vy, omega) {
             1e6
         } else {
             0.0
         };
+
+        let thrust_penalty = -1e3 * (left_thrust.powi(2) + right_thrust.powi(2)); // Deter model from using full thrust at all times
 
         dist_penalty
             + descent_penalty
@@ -132,6 +137,7 @@ impl PyEnvironment {
             + downward_progress_reward
             + landing_bonus
             + upper_exit_penalty
+            + thrust_penalty
     }
 
     fn is_done(&self, x: f32, y: f32) -> bool {
