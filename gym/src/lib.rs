@@ -86,7 +86,7 @@ impl PyEnvironment {
 
         // Changed so that crash landing and successful landing is mutually exclusive
         let landing_bonus = if self._is_crash_landing(x, y, theta, vx, vy, omega) {
-            -1e4 // Should be larger than any valid penalty
+            -1e3 // Should be larger than any valid penalty
         } else if self._is_successful_landing(x, y, theta, vx, vy, omega) {
             1e4 // Arbitrary
         } else {

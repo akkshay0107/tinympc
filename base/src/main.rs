@@ -54,7 +54,7 @@ async fn main() {
         }
 
         game.rocket
-            .set_state(px_rocket_x, px_rocket_y, rocket_angle, (4.5, 4.5));
+            .set_state(px_rocket_x, px_rocket_y, rocket_angle, (0.4, 0.4));
 
         game.draw();
         game.rocket.draw();
