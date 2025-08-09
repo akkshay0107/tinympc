@@ -37,28 +37,32 @@ class ActorCritic(nn.Module):
         return self.actor_mean(shared), self.critic(shared)
 
     def act(self, state, action=None):
-        mean, value = self.forward(state)
-        std = self.actor_log_std.exp().expand_as(mean)
-        dist = Normal(mean, std)
+            mean, value = self.forward(state)
+            std = self.actor_log_std.exp().expand_as(mean)
+            dist = Normal(mean, std)
 
-        if action is None:  # During rollout
-            raw_action = dist.sample()
-            env_action = torch.tanh(raw_action)
-            env_action = (env_action + 1.0) / 2.0
-        else:  # During update, action is from buffer
-            env_action = action
-            # Need to get the pre_tanh_action that would produce it
-            tanh_action = action * 2.0 - 1.0
-            # Clamp to prevent NaNs in log
-            eps = torch.finfo(tanh_action.dtype).eps
-            tanh_action = torch.clamp(tanh_action, -1.0 + eps, 1.0 - eps)
-            # Stable atanh using log1p
-            raw_action = 0.5 * (torch.log1p(tanh_action) - torch.log1p(-tanh_action))
+            if action is None:
+                # Rollout sample
+                raw_action = dist.rsample()
+                tanh_action = torch.tanh(raw_action)
+                env_action = (tanh_action + 1.0) / 2.0
 
-        log_prob = dist.log_prob(raw_action).sum(-1)
-        entropy = dist.entropy().sum(-1)
+                # Tanh change-of-variable correction
+                log_prob = dist.log_prob(raw_action).sum(-1)
+                log_prob -= (2 * (np.log(2) - raw_action - F.softplus(-2 * raw_action))).sum(-1)
+            else:
+                # PPO update, action is from buffer, already in [0,1]
+                tanh_action = action * 2.0 - 1.0
+                eps = torch.finfo(tanh_action.dtype).eps
+                tanh_action = torch.clamp(tanh_action, -1.0 + eps, 1.0 - eps)
+                # Stable atanh calc
+                raw_action = 0.5 * (torch.log1p(tanh_action) - torch.log1p(-tanh_action))
+                log_prob = dist.log_prob(raw_action).sum(-1)
+                log_prob -= (2 * (np.log(2) - raw_action - F.softplus(-2 * raw_action))).sum(-1)
+                env_action = action
 
-        return env_action, log_prob, entropy, value
+            entropy = dist.entropy().sum(-1)
+            return env_action, log_prob, entropy, value
 
 class PPO:
     def __init__(self, state_dim, action_dim, lr=3e-4, gamma=0.99, gae_lambda=0.95,

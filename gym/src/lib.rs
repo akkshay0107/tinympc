@@ -5,9 +5,12 @@ use rand::Rng;
 use rapier2d::na::Isometry2;
 use rapier2d::prelude::*;
 
+const MAX_SAFE_Y: f32 = MAX_POS_Y - 3.0; // Prevent rocket going out of bounds immediately
+
 #[pyclass]
 pub struct PyEnvironment {
     world: World,
+    prev_y: f32,
     steps: u32,
     max_steps: u32,
 }
@@ -19,6 +22,7 @@ impl PyEnvironment {
         let world = World::new();
         Self {
             world,
+            prev_y: MAX_POS_Y,
             steps: 0,
             max_steps,
         }
@@ -35,11 +39,17 @@ impl PyEnvironment {
         Ok(self.max_steps)
     }
 
+    #[getter]
+    pub fn get_prev_y(&self) -> PyResult<f32> {
+        Ok(self.prev_y)
+    }
+
     pub fn reset(&mut self) -> PyResult<[f32; 6]> {
         self.world = World::new();
         self.steps = 0;
 
         let init_state = self._sample(); // Random valid state
+        self.prev_y = init_state[1];
 
         // Set the state to the rocket in the world
         let rocket = self
@@ -68,27 +78,49 @@ impl PyEnvironment {
         let (vx, vy, omega) = self.world.get_rocket_dynamics();
         let next_state = [x, y, theta, vx, vy, omega];
 
-        let reward = self.calculate_reward(x, y, theta, vx, vy, omega);
-
         let done = self.is_done(x, y);
+        let reward = self.calculate_reward(x, y, theta, vx, vy, omega, done);
+
+        self.prev_y = y;
 
         Ok((next_state, reward, done))
     }
 
-    fn calculate_reward(&self, x: f32, y: f32, theta: f32, vx: f32, vy: f32, omega: f32) -> f32 {
+    fn calculate_reward(
+        &self,
+        x: f32,
+        y: f32,
+        theta: f32,
+        vx: f32,
+        vy: f32,
+        omega: f32,
+        done: bool,
+    ) -> f32 {
+        // Landing at any valid x is fine
+        // No x based rewards
         let dy = y - _MIN_POS_Y;
-
-        let dist_penalty = -2.0 * dy.powi(2); // Allowing landing on any valid x
+        let dist_penalty = -0.5 * dy.powi(2);
         let descent_penalty = -vy.powi(2);
+
         let angle_penalty = -5.0 * theta.powi(2);
         let ang_vel_penalty = -0.1 * omega.powi(2); // Enforcing larger penalty on angle to allow rocket to correct angle using angvel
-        let time_penalty = -0.02;
 
-        // Changed so that crash landing and successful landing is mutually exclusive
-        let landing_bonus = if self._is_crash_landing(x, y, theta, vx, vy, omega) {
-            -1e3 // Should be larger than any valid penalty
-        } else if self._is_successful_landing(x, y, theta, vx, vy, omega) {
-            1e4 // Arbitrary
+        let downward_progress_reward = if self.steps > 1 && self.prev_y > y {
+            10.0 * (MAX_SAFE_Y - y)
+        } else {
+            0.0
+        };
+
+        let upper_exit_penalty = if self.steps > 1 && y > MAX_SAFE_Y {
+            -1e7
+        } else {
+            0.0
+        };
+
+        let landing_bonus = if done && self._is_crash_landing(x, y, theta, vx, vy, omega) {
+            -1e6
+        } else if done && self._is_successful_landing(x, y, theta, vx, vy, omega) {
+            1e6
         } else {
             0.0
         };
@@ -97,8 +129,9 @@ impl PyEnvironment {
             + descent_penalty
             + angle_penalty
             + ang_vel_penalty
-            + time_penalty
+            + downward_progress_reward
             + landing_bonus
+            + upper_exit_penalty
     }
 
     fn is_done(&self, x: f32, y: f32) -> bool {
@@ -113,7 +146,7 @@ impl PyEnvironment {
         let mut rng = rand::rng();
 
         let start_x: f32 = rng.random_range(10.0..=(MAX_POS_X - 10.0));
-        let start_y: f32 = rng.random_range(10.0..=MAX_POS_Y);
+        let start_y: f32 = rng.random_range(10.0..=MAX_SAFE_Y);
         let start_vx: f32 = rng.random_range(-MAX_VX..=MAX_VX);
         let start_vy: f32 = rng.random_range(MIN_VY..=MAX_VY);
         let start_angle: f32 = rng.random_range(-MAX_ANGLE_DEFLECTION..=MAX_ANGLE_DEFLECTION);
@@ -121,7 +154,7 @@ impl PyEnvironment {
         // From the implememtation in base/src/world.rs
         // rotation is prevented when dragging, and angvel
         // is forcefully set to 0 when the drag ends
-        // All starting sequences have omega = 0
+        // All starting sequences must have omega = 0
 
         [start_x, start_y, start_angle, start_vx, start_vy, 0.0]
     }
