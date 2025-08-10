@@ -20,7 +20,8 @@ class PolicyNet(nn.Module):
     def forward(self, obs):
         x = self.net(obs)
         mean = self.mean_layer(x)
-        std = torch.exp(self.log_std)
+        log_std = torch.clamp(self.log_std, min=MIN_LOG_STD)
+        std = torch.exp(log_std)
         return mean, std
 
     def get_dist(self, obs):
@@ -80,8 +81,8 @@ class PPOAgent:
         return 0.5 * (torch.log1p(tanh_action) - torch.log1p(-tanh_action))
 
     @staticmethod
-    def _tanh_log_prob(dist, raw_action, squashed_action):
-        log_prob = dist.log_prob(raw_action) - torch.log(1 - squashed_action.pow(2) + 1e-6)
+    def _tanh_log_prob(dist, raw_action, tanh_action):
+        log_prob = dist.log_prob(raw_action) - torch.log(1 - tanh_action.pow(2) + 1e-6)
         return log_prob.sum(dim=-1)
 
     def select_action(self, obs):
@@ -95,8 +96,8 @@ class PPOAgent:
     def evaluate_action(self, obs, action):
         raw_action = self._unsquash_action(action)
         dist = self.policy.get_dist(obs)
-        squashed = torch.tanh(raw_action)
-        log_prob = self._tanh_log_prob(dist, raw_action, squashed)
+        tanh_action = torch.tanh(raw_action)
+        log_prob = self._tanh_log_prob(dist, raw_action, tanh_action)
         entropy = dist.entropy().sum(dim=-1)
         value = self.value(obs)
         return log_prob, entropy, value
@@ -110,8 +111,9 @@ class PPOAgent:
             dist = self.policy.get_dist(obs_t)
             value = self.value(obs_t).item()
 
-            action = dist.rsample()
-            log_prob = dist.log_prob(action).sum(dim=-1).item()
+            raw_action = dist.rsample()
+            action = self._squash_action(raw_action)
+            log_prob = self._tanh_log_prob(dist, raw_action, torch.tanh(raw_action))
 
             next_obs, reward, done = self.env.step(action.detach().numpy().flatten())
 
@@ -119,7 +121,7 @@ class PPOAgent:
             actions.append(action.detach().numpy()[0])
             rewards.append(reward)
             dones.append(done)
-            log_probs.append(log_prob)
+            log_probs.append(log_prob.item())
             values.append(value)
 
             obs = next_obs
@@ -146,9 +148,10 @@ class PPOAgent:
 
 
             # Normalize advantages
-            adv_tensor = (adv_tensor - adv_tensor.mean()) / (adv_tensor.std() + 1e-8) # eps for DBZ
+            adv_tensor = (adv_tensor - adv_tensor.mean()) / (adv_tensor.std() + 1e-6) # eps for DBZ
 
             # PPO update for given epochs
+            policy_loss = value_loss = None
             for _ in range(self.epochs):
                 for idx in range(0, len(obs_batch), self.batch_size):
                     slice_idx = slice(idx, idx + self.batch_size)
@@ -175,6 +178,9 @@ class PPOAgent:
                     self.policy_optim.step()
                     self.value_optim.step()
 
+            # Prevent pyright unbound variable warnings
+            assert(policy_loss is not None)
+            assert(value_loss is not None)
             print(f'Timesteps: {timestep}, Policy Loss: {policy_loss.item():.3f}, Value Loss: {value_loss.item():.3f}')
 
 def main():
@@ -189,7 +195,7 @@ def main():
         batch_size=64
     )
 
-    total_timesteps = 10_000
+    total_timesteps = 100_000
 
     print("Training started.")
     agent.train(total_timesteps)
