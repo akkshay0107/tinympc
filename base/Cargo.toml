@@ -6,6 +6,7 @@ edition = "2024"
 [features]
 default = []
 logging = []
+keyinput = []
 
 [dependencies]
 macroquad = "0.4.14"

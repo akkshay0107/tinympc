@@ -3,8 +3,6 @@
 //! This module contains the implementation to draw the rocket sprite
 //! based on its internal state and the functions to update its internal
 //! state
-
-use crate::world::MAX_THRUST;
 use macroquad::prelude::*;
 
 pub const ROCKET_WIDTH: f32 = 10.0;
@@ -44,8 +42,8 @@ impl RocketSprite {
         self.x = x;
         self.y = y;
         self.angle = angle;
-        self.left_thruster = thrust.0.clamp(0.0, MAX_THRUST);
-        self.right_thruster = thrust.1.clamp(0.0, MAX_THRUST);
+        self.left_thruster = thrust.0.clamp(0.0, 1.0);
+        self.right_thruster = thrust.1.clamp(0.0, 1.0);
     }
 
     pub fn draw(&self) {

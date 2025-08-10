@@ -25,7 +25,7 @@ async fn main() {
             world.end_drag();
         }
 
-        let (_, _, _, (left_thruster, right_thruster)) = game.rocket.get_state();
+        let (_, _, _, (mut left_thruster, mut right_thruster)) = game.rocket.get_state();
         world.apply_thruster_forces(left_thruster, right_thruster);
         world.step();
 
@@ -53,8 +53,35 @@ async fn main() {
             );
         }
 
-        game.rocket
-            .set_state(px_rocket_x, px_rocket_y, rocket_angle, (0.4, 0.4));
+        #[cfg(feature = "keyinput")]
+        {
+            if is_key_down(KeyCode::Left) {
+                left_thruster = 1.0;
+            } else {
+                left_thruster = 0.0;
+            }
+
+            if is_key_down(KeyCode::Right) {
+                right_thruster = 1.0;
+            } else {
+                right_thruster = 0.0;
+            }
+
+            #[cfg(feature = "logging")]
+            {
+                println!(
+                    "Thrusters - Left: {:.2}, Right: {:.2}",
+                    left_thruster, right_thruster
+                );
+            }
+        }
+
+        game.rocket.set_state(
+            px_rocket_x,
+            px_rocket_y,
+            rocket_angle,
+            (left_thruster, right_thruster),
+        );
 
         game.draw();
         game.rocket.draw();
