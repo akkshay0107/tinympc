@@ -97,13 +97,11 @@ impl PyEnvironment {
         left_thrust: f32,
         right_thrust: f32,
     ) -> f32 {
-        // Landing at any valid x is fine (No x based rewards for now)
-        let dy = y - _MIN_POS_Y; // dy in [0,40]
-        let dist_penalty = -0.2 * dy.powi(2); // dist_penalty in [-480, 0]
-        let descent_penalty = -0.5 * vy.powi(2);
-
-        let angle_penalty = -20.0 * theta.powi(2); // angle_penalty in [-200, 0]
-        let ang_vel_penalty = -10.0 * omega.powi(2);
+        let dy = y - _MIN_POS_Y;
+        let dist_penalty = -1.0 * dy.powi(2);
+        let vel_penalty = -2.0 * (vx.powi(2) + vy.powi(2));
+        let angle_penalty = -5.0 * theta.powi(2);
+        let ang_vel_penalty = -2.0 * omega.powi(2);
 
         let downward_progress_reward = if self.steps > 1 && self.prev_y > y {
             10.0 * (self.prev_y - y)
@@ -112,31 +110,36 @@ impl PyEnvironment {
         };
 
         let upper_exit_penalty = if self.steps > 1 && y > MAX_POS_Y {
-            -1e3
+            -2000.0
         } else {
             0.0
         };
 
         let landing_bonus = if self._is_crash_landing(x, y, theta, vx, vy, omega) {
-            -1e3
+            -3000.0
         } else if self._is_successful_landing(x, y, theta, vx, vy, omega) {
-            1e3
+            5000.0
         } else {
             0.0
         };
 
-        let thrust_penalty = -(left_thrust.powi(2) + right_thrust.powi(2)); // Deter model from using full thrust at all times
+        let thrust_penalty = -0.2 * (left_thrust.powi(2) + right_thrust.powi(2));
+
+        let sideways_penalty = -1.0 * (x - (MAX_POS_X / 2.0)).powi(2);
+        let horizontal_speed_penalty = -1.0 * vx.powi(2);
 
         let time_penalty = -0.01;
 
         dist_penalty
-            + descent_penalty
+            + vel_penalty
             + angle_penalty
             + ang_vel_penalty
             + downward_progress_reward
             + landing_bonus
             + upper_exit_penalty
             + thrust_penalty
+            + sideways_penalty
+            + horizontal_speed_penalty
             + time_penalty
     }
 
