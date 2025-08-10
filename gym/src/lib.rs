@@ -5,7 +5,7 @@ use rand::Rng;
 use rapier2d::na::Isometry2;
 use rapier2d::prelude::*;
 
-const MAX_SAFE_Y: f32 = MAX_POS_Y - 3.0; // Prevent rocket going out of bounds immediately
+const MAX_SAFE_Y: f32 = MAX_POS_Y - 10.0; // Prevent rocket going out of bounds immediately
 
 #[pyclass]
 pub struct PyEnvironment {
@@ -79,31 +79,23 @@ impl PyEnvironment {
         let next_state = [x, y, theta, vx, vy, omega];
 
         let done = self.is_done(x, y);
-        let reward = self.calculate_reward(x, y, theta, vx, vy, omega, thrust);
+        let reward = self.calculate_reward(x, y, theta, vx, vy, omega);
 
         self.prev_y = y;
 
         Ok((next_state, reward, done))
     }
 
-    fn calculate_reward(
-        &self,
-        x: f32,
-        y: f32,
-        theta: f32,
-        vx: f32,
-        vy: f32,
-        omega: f32,
-        thrust: f32,
-    ) -> f32 {
+    fn calculate_reward(&self, x: f32, y: f32, theta: f32, vx: f32, vy: f32, omega: f32) -> f32 {
         let dy = y - _MIN_POS_Y;
-        let dist_penalty = -0.05 * dy.powi(2);
-        let vel_penalty = -0.05 * (vx.powi(2) + vy.powi(2));
-        let angle_penalty = -theta.powi(2);
-        let ang_vel_penalty = -0.4 * omega.powi(2);
+        let dist_penalty = -2.5e-3 * dy.powi(2);
+        let vel_penalty = -2.5e-3 * (vx.powi(2) + vy.powi(2));
+        let swaying_penalty = -1e-2 * vx.powi(2);
+        let angle_penalty = -0.5 * theta.powi(2);
+        let ang_vel_penalty = -0.5 * omega.powi(2);
 
         let downward_progress_reward = if self.steps > 1 && self.prev_y > y {
-            10.0 * (self.prev_y - y)
+            0.1 * (self.prev_y - y)
         } else {
             0.0
         };
@@ -115,31 +107,30 @@ impl PyEnvironment {
         };
 
         let landing_bonus = if self._is_crash_landing(x, y, theta, vx, vy, omega) {
-            -3000.0
+            -1000.0
         } else if self._is_successful_landing(x, y, theta, vx, vy, omega) {
-            5000.0
+            1000.0
         } else {
             0.0
         };
 
-        let thrust_penalty = -thrust.powi(2);
         let time_penalty = -0.01;
 
         dist_penalty
             + vel_penalty
+            + swaying_penalty
             + angle_penalty
             + ang_vel_penalty
             + downward_progress_reward
             + landing_bonus
             + upper_exit_penalty
-            + thrust_penalty
             + time_penalty
     }
 
     fn is_done(&self, x: f32, y: f32) -> bool {
         let out_of_bounds = x < 0.0 || x > MAX_POS_X || y > MAX_POS_Y;
         let max_steps_reached = self.steps >= self.max_steps;
-        let landed = y <= GROUND_THRESHOLD;
+        let landed = y < _MIN_POS_Y;
 
         out_of_bounds || max_steps_reached || landed
     }
@@ -148,7 +139,7 @@ impl PyEnvironment {
         let mut rng = rand::rng();
 
         let start_x: f32 = rng.random_range(10.0..=(MAX_POS_X - 10.0));
-        let start_y: f32 = rng.random_range(10.0..=MAX_SAFE_Y);
+        let start_y: f32 = rng.random_range(20.0..=MAX_SAFE_Y);
         let start_angle: f32 = rng.random_range(-MAX_ANGLE_DEFLECTION..=MAX_ANGLE_DEFLECTION);
 
         // From the implememtation in base/src/world.rs

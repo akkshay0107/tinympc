@@ -5,8 +5,6 @@ from torch.distributions import Normal
 import numpy as np
 from gym import PyEnvironment
 
-MIN_LOG_STD = -7 # Prevent collapse of std under 1e-3
-
 class PolicyNet(nn.Module):
     def __init__(self, obs_dim, act_dim):
         super().__init__()
@@ -20,8 +18,7 @@ class PolicyNet(nn.Module):
     def forward(self, obs):
         x = self.net(obs)
         mean = self.mean_layer(x)
-        log_std = torch.clamp(self.log_std, min=MIN_LOG_STD)
-        std = torch.exp(log_std)
+        std = torch.exp(self.log_std)
         return mean, std
 
     def get_dist(self, obs):
@@ -43,7 +40,6 @@ class ValueNet(nn.Module):
 def compute_gae(rewards, values, dones, gamma=0.99, lam=0.95):
     advantages = []
     gae = 0
-    values = values + [0]
     for t in reversed(range(len(rewards))):
         delta = rewards[t] + gamma * values[t + 1] * (1 - dones[t]) - values[t]
         gae = delta + gamma * lam * (1 - dones[t]) * gae
@@ -67,16 +63,10 @@ class PPOAgent:
         self.value_optim = Adam(self.value.parameters(), lr=lr)
 
     @staticmethod
-    def _squash_action(raw_action):
-        squashed = torch.tanh(raw_action)
-        return (squashed + 1) / 2  # [-1, 1] to [0, 1]
-
-    @staticmethod
     def _unsquash_action(bounded_action):
-        # action from buffer, already in [0,1]
-        tanh_action = bounded_action * 2.0 - 1.0
-        eps = torch.finfo(tanh_action.dtype).eps
-        tanh_action = torch.clamp(tanh_action, -1.0 + eps, 1.0 - eps)
+        # action from buffer, already in [-1,1]
+        eps = torch.finfo(bounded_action.dtype).eps
+        tanh_action = torch.clamp(bounded_action, -1.0 + eps, 1.0 - eps)
         # Stable atanh calc
         return 0.5 * (torch.log1p(tanh_action) - torch.log1p(-tanh_action))
 
@@ -89,7 +79,7 @@ class PPOAgent:
         obs_t = torch.FloatTensor(obs).unsqueeze(0)
         dist = self.policy.get_dist(obs_t)
         raw_action = dist.rsample()
-        action = self._squash_action(raw_action)
+        action = torch.tanh(raw_action)
         log_prob = self._tanh_log_prob(dist, raw_action, torch.tanh(raw_action))
         return action.detach().numpy()[0], log_prob.detach()
 
@@ -112,7 +102,7 @@ class PPOAgent:
             value = self.value(obs_t).item()
 
             raw_action = dist.rsample()
-            action = self._squash_action(raw_action)
+            action = torch.tanh(raw_action)
             log_prob = self._tanh_log_prob(dist, raw_action, torch.tanh(raw_action))
 
             next_obs, reward, done = self.env.step(action.detach().numpy().flatten())
@@ -129,15 +119,26 @@ class PPOAgent:
             if done:
                 obs = self.env.reset()
 
-        return observations, actions, rewards, dones, log_probs, values
+        # bootstrap value of last state
+        last_val = 0
+        if horizon > 0 and not dones[-1]:
+            obs_t = torch.FloatTensor(obs).unsqueeze(0)
+            last_val = self.value(obs_t).item()
+
+        return observations, actions, rewards, dones, log_probs, values, last_val
 
     def train(self, total_timesteps):
         timestep = 0
         while timestep < total_timesteps:
-            obs_batch, act_batch, rew_batch, done_batch, logp_batch, val_batch = self.collect_trajectories()
+            obs_batch, act_batch, rew_batch, done_batch, logp_batch, val_batch, last_val = self.collect_trajectories()
             timestep += len(rew_batch)
 
-            advantages = compute_gae(rew_batch, val_batch, done_batch, self.gamma, self.lam)
+            # rew_batch = np.array(rew_batch, dtype=np.float32)
+            # rew_mean = rew_batch.mean()
+            # rew_std = rew_batch.std() + 1e-6
+            # rew_batch = ((rew_batch - rew_mean) / rew_std).tolist()
+
+            advantages = compute_gae(rew_batch, val_batch + [last_val], done_batch, self.gamma, self.lam)
             returns = [adv + val for adv, val in zip(advantages, val_batch)]
 
             obs_tensor = torch.as_tensor(np.array(obs_batch), dtype=torch.float32)
@@ -152,14 +153,17 @@ class PPOAgent:
 
             # PPO update for given epochs
             policy_loss = value_loss = None
+            num_samples = len(obs_batch)
             for _ in range(self.epochs):
-                for idx in range(0, len(obs_batch), self.batch_size):
-                    slice_idx = slice(idx, idx + self.batch_size)
-                    obs_b = obs_tensor[slice_idx]
-                    act_b = act_tensor[slice_idx]
-                    ret_b = ret_tensor[slice_idx]
-                    adv_b = adv_tensor[slice_idx]
-                    old_logp_b = old_logp_tensor[slice_idx]
+                indices = np.arange(num_samples)
+                np.random.shuffle(indices)
+                for idx in range(0, num_samples, self.batch_size):
+                    batch_indices = indices[idx:idx + self.batch_size]
+                    obs_b = obs_tensor[batch_indices]
+                    act_b = act_tensor[batch_indices]
+                    ret_b = ret_tensor[batch_indices]
+                    adv_b = adv_tensor[batch_indices]
+                    old_logp_b = old_logp_tensor[batch_indices]
 
                     new_logp, entropy, value = self.evaluate_action(obs_b, act_b)
                     ratio = torch.exp(new_logp - old_logp_b)
@@ -170,7 +174,7 @@ class PPOAgent:
                     value_loss = nn.MSELoss()(value, ret_b)
                     entropy_bonus = entropy.mean()
 
-                    total_loss = policy_loss + 0.5 * value_loss - 0.1 * entropy_bonus
+                    total_loss = policy_loss + 0.5 * value_loss - 0.05 * entropy_bonus
 
                     self.policy_optim.zero_grad()
                     self.value_optim.zero_grad()
@@ -184,18 +188,18 @@ class PPOAgent:
             print(f'Timesteps: {timestep}, Policy Loss: {policy_loss.item():.3f}, Value Loss: {value_loss.item():.3f}')
 
 def main():
-    env = PyEnvironment(1000)
+    env = PyEnvironment(5000)
     agent = PPOAgent(
         env,
         gamma=0.99,
         lam=0.95,
-        clip_eps=0.2,
-        lr=3e-4,
+        clip_eps=0.1,
+        lr=1e-4,
         epochs=10,
         batch_size=64
     )
 
-    total_timesteps = 10_000
+    total_timesteps = 200_000
 
     print("Training started.")
     agent.train(total_timesteps)
@@ -213,8 +217,7 @@ def main():
         obs_t = torch.FloatTensor(obs).unsqueeze(0)
         mean, _ = agent.policy.forward(obs_t)
         mean = mean[0]  # shape: (2,)
-        squashed = torch.tanh(mean)
-        action = ((squashed + 1) / 2).detach().numpy()  # ensure [0, 1]
+        action = torch.tanh(mean).detach().numpy()
         obs, reward, done = env.step(action)
         thrust = action.tolist()
         print(f"{step=} {obs=} {thrust=} {reward=}")
