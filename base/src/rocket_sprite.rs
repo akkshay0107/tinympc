@@ -13,9 +13,9 @@ const THRUSTER_HEIGHT_RATIO: f32 = 0.4;
 pub struct RocketSprite {
     x: f32,
     y: f32,
-    angle: f32,          // angle from vertical (radians)
-    left_thruster: f32,  // left thruster power (normalized)
-    right_thruster: f32, // right thruster power (normalized)
+    angle: f32,        // angle of rocket from vertical (radians)
+    thrust: f32,       // thrust magnitude (normalized to [-1, 1])
+    gimbal_angle: f32, // gimbal angle relative to rocket body (normalized to [-1, 1])
 }
 
 impl RocketSprite {
@@ -24,26 +24,21 @@ impl RocketSprite {
             x,
             y,
             angle: 0.0,
-            left_thruster: 0.0,
-            right_thruster: 0.0,
+            thrust: 0.0,
+            gimbal_angle: 0.0,
         }
     }
 
     pub fn get_state(&self) -> (f32, f32, f32, (f32, f32)) {
-        (
-            self.x,
-            self.y,
-            self.angle,
-            (self.left_thruster, self.right_thruster),
-        )
+        (self.x, self.y, self.angle, (self.thrust, self.gimbal_angle))
     }
 
-    pub fn set_state(&mut self, x: f32, y: f32, angle: f32, thrust: (f32, f32)) {
+    pub fn set_state(&mut self, x: f32, y: f32, angle: f32, thruster: (f32, f32)) {
         self.x = x;
         self.y = y;
         self.angle = angle;
-        self.left_thruster = thrust.0.clamp(0.0, 1.0);
-        self.right_thruster = thrust.1.clamp(0.0, 1.0);
+        self.thrust = thruster.0.clamp(-1.0, 1.0);
+        self.gimbal_angle = thruster.1.clamp(-1.0, 1.0);
     }
 
     pub fn draw(&self) {

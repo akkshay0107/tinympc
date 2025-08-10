@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Record {
@@ -11,8 +11,8 @@ pub struct Record {
     pub current_angular_vel: f32,
 
     // Action
-    pub left_thruster: f32,
-    pub right_thruster: f32,
+    pub thrust: f32,
+    pub gimbal_angle: f32,
 
     // Deltas from current to resulting state
     pub delta_pos_x: f32,
@@ -29,8 +29,8 @@ impl Record {
         current_angle: f32,
         current_vel: (f32, f32),
         current_angular_vel: f32,
-        left_thruster: f32,
-        right_thruster: f32,
+        thrust: f32,
+        gimbal_angle: f32,
         delta_pos: (f32, f32),
         delta_angle: f32,
         delta_vel: (f32, f32),
@@ -43,8 +43,8 @@ impl Record {
             current_vel_x: current_vel.0,
             current_vel_y: current_vel.1,
             current_angular_vel,
-            left_thruster,
-            right_thruster,
+            thrust,
+            gimbal_angle,
             delta_pos_x: delta_pos.0,
             delta_pos_y: delta_pos.1,
             delta_angle,
@@ -86,14 +86,17 @@ mod tests {
 
         let temp_path = "test_record.csv";
         Record::write_to_csv(&[record], temp_path).unwrap();
-        
+
         let content = fs::read_to_string(temp_path).unwrap();
         fs::remove_file(temp_path).unwrap();
-        
+
         // Check if the content contains the expected values (ignoring headers)
         let expected_values = "1.0,2.0,0.1,0.1,0.2,0.05,1.0,0.5,0.1,0.05,0.05,0.01,0.01,-0.01";
         if !content.contains(expected_values) {
-            panic!("Content does not contain expected values.\nExpected: {}\nActual: {}", expected_values, content);
+            panic!(
+                "Content does not contain expected values.\nExpected: {}\nActual: {}",
+                expected_values, content
+            );
         }
     }
 }

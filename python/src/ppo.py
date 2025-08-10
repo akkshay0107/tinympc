@@ -195,7 +195,7 @@ def main():
         batch_size=64
     )
 
-    total_timesteps = 100_000
+    total_timesteps = 10_000
 
     print("Training started.")
     agent.train(total_timesteps)

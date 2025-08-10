@@ -25,8 +25,8 @@ async fn main() {
             world.end_drag();
         }
 
-        let (_, _, _, (mut left_thruster, mut right_thruster)) = game.rocket.get_state();
-        world.apply_thruster_forces(left_thruster, right_thruster);
+        let (_, _, _, (mut thrust, mut gimbal_angle)) = game.rocket.get_state();
+        world.apply_thruster_forces(thrust, gimbal_angle);
         world.step();
 
         let (rocket_x, rocket_y, rocket_angle) = world.get_rocket_state();
@@ -55,23 +55,27 @@ async fn main() {
 
         #[cfg(feature = "keyinput")]
         {
-            if is_key_down(KeyCode::Left) {
-                left_thruster = 1.0;
-            } else {
-                left_thruster = 0.0;
+            let step: f32 = 0.05;
+            if is_key_down(KeyCode::Up) {
+                thrust += step;
+            } else if is_key_down(KeyCode::Down) {
+                thrust -= step;
             }
 
-            if is_key_down(KeyCode::Right) {
-                right_thruster = 1.0;
-            } else {
-                right_thruster = 0.0;
+            if is_key_down(KeyCode::Left) {
+                gimbal_angle -= step;
+            } else if is_key_down(KeyCode::Right) {
+                gimbal_angle += step;
             }
+
+            thrust = thrust.clamp(-1.0, 1.0);
+            gimbal_angle = gimbal_angle.clamp(-1.0, 1.0);
 
             #[cfg(feature = "logging")]
             {
                 println!(
-                    "Thrusters - Left: {:.2}, Right: {:.2}",
-                    left_thruster, right_thruster
+                    "Thrusters - Thrust: {:.2}, Angle: {:.2}",
+                    thrust, gimbal_angle
                 );
             }
         }
@@ -80,7 +84,7 @@ async fn main() {
             px_rocket_x,
             px_rocket_y,
             rocket_angle,
-            (left_thruster, right_thruster),
+            (thrust, gimbal_angle),
         );
 
         game.draw();

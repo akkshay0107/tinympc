@@ -69,8 +69,8 @@ impl PyEnvironment {
 
     pub fn step(&mut self, action: [f32; 2]) -> PyResult<([f32; 6], f32, bool)> {
         // Run the physics step in rapier for the next state
-        let [left_thrust, right_thrust] = action;
-        self.world.apply_thruster_forces(left_thrust, right_thrust);
+        let [thrust, gimbal_angle] = action;
+        self.world.apply_thruster_forces(thrust, gimbal_angle);
         self.world.step();
         self.steps += 1;
 
@@ -79,7 +79,7 @@ impl PyEnvironment {
         let next_state = [x, y, theta, vx, vy, omega];
 
         let done = self.is_done(x, y);
-        let reward = self.calculate_reward(x, y, theta, vx, vy, omega, left_thrust, right_thrust);
+        let reward = self.calculate_reward(x, y, theta, vx, vy, omega, thrust);
 
         self.prev_y = y;
 
@@ -94,14 +94,13 @@ impl PyEnvironment {
         vx: f32,
         vy: f32,
         omega: f32,
-        left_thrust: f32,
-        right_thrust: f32,
+        thrust: f32,
     ) -> f32 {
         let dy = y - _MIN_POS_Y;
-        let dist_penalty = -1.0 * dy.powi(2);
-        let vel_penalty = -2.0 * (vx.powi(2) + vy.powi(2));
-        let angle_penalty = -5.0 * theta.powi(2);
-        let ang_vel_penalty = -2.0 * omega.powi(2);
+        let dist_penalty = -0.05 * dy.powi(2);
+        let vel_penalty = -0.05 * (vx.powi(2) + vy.powi(2));
+        let angle_penalty = -theta.powi(2);
+        let ang_vel_penalty = -0.4 * omega.powi(2);
 
         let downward_progress_reward = if self.steps > 1 && self.prev_y > y {
             10.0 * (self.prev_y - y)
@@ -123,11 +122,7 @@ impl PyEnvironment {
             0.0
         };
 
-        let thrust_penalty = -0.2 * (left_thrust.powi(2) + right_thrust.powi(2));
-
-        let sideways_penalty = -1.0 * (x - (MAX_POS_X / 2.0)).powi(2);
-        let horizontal_speed_penalty = -1.0 * vx.powi(2);
-
+        let thrust_penalty = -thrust.powi(2);
         let time_penalty = -0.01;
 
         dist_penalty
@@ -138,8 +133,6 @@ impl PyEnvironment {
             + landing_bonus
             + upper_exit_penalty
             + thrust_penalty
-            + sideways_penalty
-            + horizontal_speed_penalty
             + time_penalty
     }
 
@@ -156,16 +149,14 @@ impl PyEnvironment {
 
         let start_x: f32 = rng.random_range(10.0..=(MAX_POS_X - 10.0));
         let start_y: f32 = rng.random_range(10.0..=MAX_SAFE_Y);
-        let start_vx: f32 = rng.random_range(-MAX_VX..=MAX_VX);
-        let start_vy: f32 = rng.random_range(MIN_VY..=MAX_VY);
         let start_angle: f32 = rng.random_range(-MAX_ANGLE_DEFLECTION..=MAX_ANGLE_DEFLECTION);
 
         // From the implememtation in base/src/world.rs
-        // rotation is prevented when dragging, and angvel
+        // rotation is prevented when dragging, and velocities
         // is forcefully set to 0 when the drag ends
-        // All starting sequences must have omega = 0
+        // All starting sequences must have v & omega = 0
 
-        [start_x, start_y, start_angle, start_vx, start_vy, 0.0]
+        [start_x, start_y, start_angle, 0.0, 0.0, 0.0]
     }
 
     pub fn sample(&self) -> PyResult<[f32; 6]> {
