@@ -7,12 +7,35 @@ use rapier2d::prelude::*;
 
 const MAX_SAFE_Y: f32 = MAX_POS_Y - 10.0; // Prevent rocket going out of bounds immediately
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum EpisodeStatus {
+    InProgress,
+    Success,
+    Crash,
+    OutOfBounds,
+    Timeout,
+}
+
+impl EpisodeStatus {
+    fn as_str(&self) -> &'static str {
+        match self {
+            EpisodeStatus::InProgress => "in_progress",
+            EpisodeStatus::Success => "success",
+            EpisodeStatus::Crash => "crash",
+            EpisodeStatus::OutOfBounds => "out_of_bounds",
+            EpisodeStatus::Timeout => "timeout",
+        }
+    }
+}
+
 #[pyclass]
 pub struct PyEnvironment {
     world: World,
     prev_y: f32,
     steps: u32,
     max_steps: u32,
+    obs_dim: u32,
+    act_dim: u32,
 }
 
 #[pymethods]
@@ -25,6 +48,8 @@ impl PyEnvironment {
             prev_y: MAX_POS_Y,
             steps: 0,
             max_steps,
+            obs_dim: 6,
+            act_dim: 2,
         }
     }
 
@@ -42,6 +67,16 @@ impl PyEnvironment {
     #[getter]
     pub fn get_prev_y(&self) -> PyResult<f32> {
         Ok(self.prev_y)
+    }
+
+    #[getter]
+    pub fn get_obs_dim(&self) -> PyResult<u32> {
+        Ok(self.obs_dim)
+    }
+
+    #[getter]
+    pub fn get_act_dim(&self) -> PyResult<u32> {
+        Ok(self.act_dim)
     }
 
     pub fn reset(&mut self) -> PyResult<[f32; 6]> {
@@ -67,7 +102,7 @@ impl PyEnvironment {
         Ok(init_state)
     }
 
-    pub fn step(&mut self, action: [f32; 2]) -> PyResult<([f32; 6], f32, bool)> {
+    pub fn step(&mut self, action: [f32; 2]) -> PyResult<([f32; 6], f32, bool, &'static str)> {
         // Run the physics step in rapier for the next state
         let [thrust, gimbal_angle] = action;
         self.world.apply_thruster_forces(thrust, gimbal_angle);
@@ -78,45 +113,45 @@ impl PyEnvironment {
         let (vx, vy, omega) = self.world.get_rocket_dynamics();
         let next_state = [x, y, theta, vx, vy, omega];
 
-        let done = self.is_done(x, y);
+        let (reason, done) = self._episode_status(x, y, theta, vx, vy, omega);
         let reward = self.calculate_reward(x, y, theta, vx, vy, omega);
 
         self.prev_y = y;
 
-        Ok((next_state, reward, done))
+        Ok((next_state, reward, done, reason))
     }
 
     fn calculate_reward(&self, x: f32, y: f32, theta: f32, vx: f32, vy: f32, omega: f32) -> f32 {
         let dy = y - _MIN_POS_Y;
-        let dist_penalty = -2.5e-3 * dy.powi(2);
-        let vel_penalty = -2.5e-3 * (vx.powi(2) + vy.powi(2));
-        let swaying_penalty = -1e-2 * vx.powi(2);
-        let angle_penalty = -0.5 * theta.powi(2);
-        let ang_vel_penalty = -0.5 * omega.powi(2);
+        let dist_penalty = -1e-2 * dy.powi(2);
+        let vel_penalty = -1e-2 * (vx.powi(2) + vy.powi(2));
+        let swaying_penalty = -2e-2 * vx.powi(2);
+        let angle_penalty = -5.0 * theta.powi(2);
+        let ang_vel_penalty = -5.0 * omega.powi(2);
 
         let downward_progress_reward = if self.steps > 1 && self.prev_y > y {
-            0.1 * (self.prev_y - y)
+            0.5 * (self.prev_y - y)
         } else {
             0.0
         };
 
         let upper_exit_penalty = if self.steps > 1 && y > MAX_POS_Y {
-            -2000.0
+            -1e4
         } else {
             0.0
         };
 
         let landing_bonus = if self._is_crash_landing(x, y, theta, vx, vy, omega) {
-            -1000.0
+            -1e4
         } else if self._is_successful_landing(x, y, theta, vx, vy, omega) {
-            1000.0
+            1e4
         } else {
             0.0
         };
 
-        let time_penalty = -0.01;
+        let time_penalty = -0.1;
 
-        dist_penalty
+        (dist_penalty
             + vel_penalty
             + swaying_penalty
             + angle_penalty
@@ -124,15 +159,8 @@ impl PyEnvironment {
             + downward_progress_reward
             + landing_bonus
             + upper_exit_penalty
-            + time_penalty
-    }
-
-    fn is_done(&self, x: f32, y: f32) -> bool {
-        let out_of_bounds = x < 0.0 || x > MAX_POS_X || y > MAX_POS_Y;
-        let max_steps_reached = self.steps >= self.max_steps;
-        let landed = y < _MIN_POS_Y;
-
-        out_of_bounds || max_steps_reached || landed
+            + time_penalty)
+            * 5e-3
     }
 
     fn _sample(&self) -> [f32; 6] {
@@ -185,6 +213,29 @@ impl PyEnvironment {
         let gentle_omega = omega.abs() <= MAX_LANDING_ANGULAR_VELOCITY;
 
         landed && in_x_range && gentle_angle && gentle_vy && gentle_vx && gentle_omega
+    }
+
+    fn _episode_status(
+        &self,
+        x: f32,
+        y: f32,
+        theta: f32,
+        vx: f32,
+        vy: f32,
+        omega: f32,
+    ) -> (&'static str, bool) {
+        let status = if self._is_successful_landing(x, y, theta, vx, vy, omega) {
+            EpisodeStatus::Success
+        } else if self._is_crash_landing(x, y, theta, vx, vy, omega) {
+            EpisodeStatus::Crash
+        } else if x < 0.0 || x > MAX_POS_X || y > MAX_POS_Y {
+            EpisodeStatus::OutOfBounds
+        } else if self.steps >= self.max_steps {
+            EpisodeStatus::Timeout
+        } else {
+            EpisodeStatus::InProgress
+        };
+        (status.as_str(), status != EpisodeStatus::InProgress)
     }
 }
 

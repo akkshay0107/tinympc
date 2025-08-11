@@ -15,10 +15,10 @@ const GROUND_RESTITUTION: f32 = 0.5;
 const ROCKET_RESTITUTION: f32 = 0.1;
 const ROCKET_MASS: f32 = 1.0;
 const GROUND_SIZE: Vector<f32> = vector![40.0, 6.0];
-const ANGULAR_DRAG_COEFFICIENT: f32 = 1.4;
-const LINEAR_DRAG_COEFFICIENT: f32 = 0.7;
+const ANGULAR_DRAG_COEFFICIENT: f32 = 4.0;
+const LINEAR_DRAG_COEFFICIENT: f32 = 2.0;
 
-pub const MAX_THRUST: f32 = 10.0; // Thruster can offset gravity
+pub const MAX_THRUST: f32 = 15.0; // Thruster can offset gravity
 pub const ROCKET_WIDTH: f32 = 20.0;
 pub const ROCKET_HEIGHT: f32 = 40.0;
 

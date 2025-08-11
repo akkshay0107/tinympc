@@ -4,6 +4,7 @@ from torch.optim import Adam
 from torch.distributions import Normal
 import numpy as np
 from gym import PyEnvironment
+from collections import Counter
 
 class PolicyNet(nn.Module):
     def __init__(self, obs_dim, act_dim):
@@ -49,16 +50,14 @@ def compute_gae(rewards, values, dones, gamma=0.99, lam=0.95):
 class PPOAgent:
     def __init__(self, env, gamma=0.99, lam=0.95, clip_eps=0.2, lr=3e-4, epochs=10, batch_size=64):
         self.env = env
-        self.obs_dim = 6
-        self.act_dim = 2
         self.gamma = gamma
         self.lam = lam
         self.clip_eps = clip_eps
         self.epochs = epochs
         self.batch_size = batch_size
 
-        self.policy = PolicyNet(self.obs_dim, self.act_dim)
-        self.value = ValueNet(self.obs_dim)
+        self.policy = PolicyNet(self.env.obs_dim, self.env.act_dim)
+        self.value = ValueNet(self.env.obs_dim)
         self.policy_optim = Adam(self.policy.parameters(), lr=lr)
         self.value_optim = Adam(self.value.parameters(), lr=lr)
 
@@ -105,7 +104,7 @@ class PPOAgent:
             action = torch.tanh(raw_action)
             log_prob = self._tanh_log_prob(dist, raw_action, torch.tanh(raw_action))
 
-            next_obs, reward, done = self.env.step(action.detach().numpy().flatten())
+            next_obs, reward, done, _ = self.env.step(action.detach().numpy().flatten())
 
             observations.append(obs)
             actions.append(action.detach().numpy()[0])
@@ -130,7 +129,7 @@ class PPOAgent:
     def train(self, total_timesteps):
         timestep = 0
         while timestep < total_timesteps:
-            obs_batch, act_batch, rew_batch, done_batch, logp_batch, val_batch, last_val = self.collect_trajectories()
+            obs_batch, act_batch, rew_batch, done_batch, logp_batch, val_batch, last_val = self.collect_trajectories(horizon=4096)
             timestep += len(rew_batch)
 
             # rew_batch = np.array(rew_batch, dtype=np.float32)
@@ -151,7 +150,7 @@ class PPOAgent:
             # Normalize advantages
             adv_tensor = (adv_tensor - adv_tensor.mean()) / (adv_tensor.std() + 1e-6) # eps for DBZ
 
-            # PPO update for given epochs
+            # PPO update
             policy_loss = value_loss = None
             num_samples = len(obs_batch)
             for _ in range(self.epochs):
@@ -174,7 +173,7 @@ class PPOAgent:
                     value_loss = nn.MSELoss()(value, ret_b)
                     entropy_bonus = entropy.mean()
 
-                    total_loss = policy_loss + 0.5 * value_loss - 0.05 * entropy_bonus
+                    total_loss = policy_loss + 0.5 * value_loss - 0.01 * entropy_bonus
 
                     self.policy_optim.zero_grad()
                     self.value_optim.zero_grad()
@@ -187,43 +186,86 @@ class PPOAgent:
             assert(value_loss is not None)
             print(f'Timesteps: {timestep}, Policy Loss: {policy_loss.item():.3f}, Value Loss: {value_loss.item():.3f}')
 
+def print_counter_table(counter: Counter):
+    if not counter:
+        print("(empty Counter)")
+        return
+
+    sorted_items = sorted(counter.items(), key=lambda x: x[1], reverse=True)
+
+    # Determine col width
+    max_key_len = max(len(str(k)) for k, _ in sorted_items)
+    max_val_len = max(len(str(v)) for _, v in sorted_items)
+
+    header_item = "Reason"
+    header_count = "Count"
+    print(f"{header_item:<{max_key_len}}  {header_count:>{max_val_len}}")
+    print(f"{'-' * max_key_len}  {'-' * max_val_len}")
+
+    for key, count in sorted_items:
+        print(f"{key:<{max_key_len}}  {count:>{max_val_len}}")
+
+
 def main():
-    env = PyEnvironment(5000)
+    # constants
+    MAX_STEPS = 3000
+    TOTAL_TIMESTEPS = 1_000_000
+    TEST_EPISODES = 100
+
+    env = PyEnvironment(MAX_STEPS)
     agent = PPOAgent(
         env,
         gamma=0.99,
         lam=0.95,
         clip_eps=0.1,
-        lr=1e-4,
+        lr=5e-5,
         epochs=10,
         batch_size=64
     )
 
-    total_timesteps = 200_000
-
     print("Training started.")
-    agent.train(total_timesteps)
+    agent.train(TOTAL_TIMESTEPS)
     print("Training completed.")
 
     # torch.save(agent.policy.state_dict(), "ppo_policy.pth")
     # torch.save(agent.value.state_dict(), "ppo_value.pth")
-    # print("Model weights saved to pth files.")
 
-    # Test episode
-    obs = env.reset()
-    done = False
-    step = 1
-    while not done:
-        obs_t = torch.FloatTensor(obs).unsqueeze(0)
-        mean, _ = agent.policy.forward(obs_t)
-        mean = mean[0]  # shape: (2,)
-        action = torch.tanh(mean).detach().numpy()
-        obs, reward, done = env.step(action)
-        thrust = action.tolist()
-        print(f"{step=} {obs=} {thrust=} {reward=}")
-        step += 1
+    print("Running test episodes...")
 
-    print("Test episode completed.")
+    rewards = []
+    num_steps = []
+    reasons = Counter()
+
+    for i in range(TEST_EPISODES):
+        obs = env.reset()
+        start_state = [x for x in obs] # Deep copy basically
+        done = False
+        total_reward = 0
+        steps = 0
+        reason = "N/A"
+        while not done:
+            action, _ = agent.select_action(obs)
+            obs, reward, done, reason = env.step(action)
+            total_reward += reward
+            steps += 1
+
+        end_state = obs
+
+        print(f"\nTest Episode {i + 1}:")
+        print(f"Start State: {start_state}")
+        print(f"End State:   {end_state}")
+        print(f"Total Steps: {steps}")
+        print(f"Total Reward: {total_reward:.2f}")
+
+        rewards.append(total_reward)
+        num_steps.append(steps)
+        reasons[reason] += 1
+
+
+    print("Overall Metrics")
+    print(f"Average Cumulative Reward: {sum(rewards)/len(rewards)}")
+    print(f"Average number of timesteps: {sum(num_steps)/len(num_steps)}")
+    print_counter_table(reasons)
 
 if __name__ == "__main__":
     main()
