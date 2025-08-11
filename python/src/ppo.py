@@ -4,7 +4,9 @@ from torch.optim import Adam
 from torch.distributions import Normal
 import numpy as np
 from gym import PyEnvironment
+from pathlib import Path
 from collections import Counter
+from statistics import median
 
 class PolicyNet(nn.Module):
     def __init__(self, obs_dim, act_dim):
@@ -60,6 +62,15 @@ class PPOAgent:
         self.value = ValueNet(self.env.obs_dim)
         self.policy_optim = Adam(self.policy.parameters(), lr=lr)
         self.value_optim = Adam(self.value.parameters(), lr=lr)
+
+    @staticmethod
+    def _median_variance_score(rewards, var_coef=0.1):
+        if not rewards:
+            return float("-inf")
+
+        med = median(rewards)
+        var = np.var(rewards)
+        return med - var_coef * var
 
     @staticmethod
     def _unsquash_action(bounded_action):
@@ -128,9 +139,27 @@ class PPOAgent:
 
     def train(self, total_timesteps):
         timestep = 0
+        best_score = float("-inf")
         while timestep < total_timesteps:
             obs_batch, act_batch, rew_batch, done_batch, logp_batch, val_batch, last_val = self.collect_trajectories(horizon=4096)
             timestep += len(rew_batch)
+
+            # Saving the model with the best score for a batch
+            episode_rewards = []
+            ep_reward = 0
+            for r, d in zip(rew_batch, done_batch):
+                ep_reward += r
+                if d:
+                    episode_rewards.append(ep_reward)
+                    ep_reward = 0
+
+            score = self._median_variance_score(episode_rewards)
+
+            if score > best_score:
+                best_score = score
+                torch.save(self.policy.state_dict(), "./models/policy_net.pth")
+                torch.save(self.value.state_dict(), "./models/value_net.pth")
+                print(f"New best score {score:.2f} - Checkpoint saved")
 
             # rew_batch = np.array(rew_batch, dtype=np.float32)
             # rew_mean = rew_batch.mean()
@@ -227,8 +256,16 @@ def main():
     agent.train(TOTAL_TIMESTEPS)
     print("Training completed.")
 
-    # torch.save(agent.policy.state_dict(), "ppo_policy.pth")
-    # torch.save(agent.value.state_dict(), "ppo_value.pth")
+    # Use saved best models for test episodes
+    policy_net_path = Path("./models/policy_net.pth")
+    value_net_path = Path("./models/value_net.pth")
+
+    if policy_net_path.exists() and value_net_path.exists():
+        agent.policy.load_state_dict(torch.load(policy_net_path))
+        agent.value.load_state_dict(torch.load(value_net_path))
+        print("Loaded saved policy and value networks.")
+    else:
+        print("Using agent from latest epoch.")
 
     print("Running test episodes...")
 
@@ -262,7 +299,7 @@ def main():
         reasons[reason] += 1
 
 
-    print("Overall Metrics")
+    print("\nOverall Metrics")
     print(f"Average Cumulative Reward: {sum(rewards)/len(rewards)}")
     print(f"Average number of timesteps: {sum(num_steps)/len(num_steps)}")
     print_counter_table(reasons)

@@ -2,3 +2,4 @@
 .*
 !.gitignore
 /python/runs
+/python/models
