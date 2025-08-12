@@ -125,7 +125,7 @@ impl PyEnvironment {
         let dy = y - _MIN_POS_Y;
         let dist_penalty = -1e-2 * dy.powi(2);
         let vel_penalty = -1e-2 * (vx.powi(2) + vy.powi(2));
-        let swaying_penalty = -2e-2 * vx.powi(2);
+        let swaying_penalty = -5e-2 * vx.powi(2);
         let angle_penalty = -5.0 * theta.powi(2);
         let ang_vel_penalty = -5.0 * omega.powi(2);
 
@@ -149,7 +149,7 @@ impl PyEnvironment {
             0.0
         };
 
-        let time_penalty = -0.1;
+        let time_penalty = -0.2;
 
         (dist_penalty
             + vel_penalty

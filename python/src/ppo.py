@@ -3,10 +3,8 @@ import torch.nn as nn
 from torch.optim import Adam
 from torch.distributions import Normal
 import numpy as np
+
 from gym import PyEnvironment
-from pathlib import Path
-from collections import Counter
-from statistics import median
 
 class PolicyNet(nn.Module):
     def __init__(self, obs_dim, act_dim):
@@ -40,15 +38,6 @@ class ValueNet(nn.Module):
     def forward(self, obs):
         return self.net(obs).squeeze(-1)
 
-def compute_gae(rewards, values, dones, gamma=0.99, lam=0.95):
-    advantages = []
-    gae = 0
-    for t in reversed(range(len(rewards))):
-        delta = rewards[t] + gamma * values[t + 1] * (1 - dones[t]) - values[t]
-        gae = delta + gamma * lam * (1 - dones[t]) * gae
-        advantages.insert(0, gae)
-    return advantages
-
 class PPOAgent:
     def __init__(self, env, gamma=0.99, lam=0.95, clip_eps=0.2, lr=3e-4, epochs=10, batch_size=64):
         self.env = env
@@ -64,11 +53,11 @@ class PPOAgent:
         self.value_optim = Adam(self.value.parameters(), lr=lr)
 
     @staticmethod
-    def _median_variance_score(rewards, var_coef=0.1):
+    def _score(rewards, var_coef=0.1):
         if not rewards:
             return float("-inf")
 
-        med = median(rewards)
+        med = np.median(rewards)
         var = np.var(rewards)
         return med - var_coef * var
 
@@ -84,6 +73,18 @@ class PPOAgent:
     def _tanh_log_prob(dist, raw_action, tanh_action):
         log_prob = dist.log_prob(raw_action) - torch.log(1 - tanh_action.pow(2) + 1e-6)
         return log_prob.sum(dim=-1)
+
+    @staticmethod
+    def _compute_gae(rewards, values, dones, gamma=0.99, lam=0.95):
+        advantages = []
+        gae = 0
+        for t in reversed(range(len(rewards))):
+            delta = rewards[t] + gamma * values[t + 1] * (1 - dones[t]) - values[t]
+            gae = delta + gamma * lam * (1 - dones[t]) * gae
+            advantages.append(gae)  # Append instead of insert in front
+        advantages.reverse()  # Reverse once at the end to preserve O(n) complexity
+        return advantages
+
 
     def select_action(self, obs):
         obs_t = torch.FloatTensor(obs).unsqueeze(0)
@@ -153,7 +154,7 @@ class PPOAgent:
                     episode_rewards.append(ep_reward)
                     ep_reward = 0
 
-            score = self._median_variance_score(episode_rewards)
+            score = self._score(episode_rewards)
 
             if score > best_score:
                 best_score = score
@@ -166,7 +167,7 @@ class PPOAgent:
             # rew_std = rew_batch.std() + 1e-6
             # rew_batch = ((rew_batch - rew_mean) / rew_std).tolist()
 
-            advantages = compute_gae(rew_batch, val_batch + [last_val], done_batch, self.gamma, self.lam)
+            advantages = self._compute_gae(rew_batch, val_batch + [last_val], done_batch, self.gamma, self.lam)
             returns = [adv + val for adv, val in zip(advantages, val_batch)]
 
             obs_tensor = torch.as_tensor(np.array(obs_batch), dtype=torch.float32)
@@ -215,31 +216,10 @@ class PPOAgent:
             assert(value_loss is not None)
             print(f'Timesteps: {timestep}, Policy Loss: {policy_loss.item():.3f}, Value Loss: {value_loss.item():.3f}')
 
-def print_counter_table(counter: Counter):
-    if not counter:
-        print("(empty Counter)")
-        return
-
-    sorted_items = sorted(counter.items(), key=lambda x: x[1], reverse=True)
-
-    # Determine col width
-    max_key_len = max(len(str(k)) for k, _ in sorted_items)
-    max_val_len = max(len(str(v)) for _, v in sorted_items)
-
-    header_item = "Reason"
-    header_count = "Count"
-    print(f"{header_item:<{max_key_len}}  {header_count:>{max_val_len}}")
-    print(f"{'-' * max_key_len}  {'-' * max_val_len}")
-
-    for key, count in sorted_items:
-        print(f"{key:<{max_key_len}}  {count:>{max_val_len}}")
-
-
 def main():
     # constants
     MAX_STEPS = 3000
     TOTAL_TIMESTEPS = 1_000_000
-    TEST_EPISODES = 100
 
     env = PyEnvironment(MAX_STEPS)
     agent = PPOAgent(
@@ -255,54 +235,6 @@ def main():
     print("Training started.")
     agent.train(TOTAL_TIMESTEPS)
     print("Training completed.")
-
-    # Use saved best models for test episodes
-    policy_net_path = Path("./models/policy_net.pth")
-    value_net_path = Path("./models/value_net.pth")
-
-    if policy_net_path.exists() and value_net_path.exists():
-        agent.policy.load_state_dict(torch.load(policy_net_path))
-        agent.value.load_state_dict(torch.load(value_net_path))
-        print("Loaded saved policy and value networks.")
-    else:
-        print("Using agent from latest epoch.")
-
-    print("Running test episodes...")
-
-    rewards = []
-    num_steps = []
-    reasons = Counter()
-
-    for i in range(TEST_EPISODES):
-        obs = env.reset()
-        start_state = [x for x in obs] # Deep copy basically
-        done = False
-        total_reward = 0
-        steps = 0
-        reason = "N/A"
-        while not done:
-            action, _ = agent.select_action(obs)
-            obs, reward, done, reason = env.step(action)
-            total_reward += reward
-            steps += 1
-
-        end_state = obs
-
-        print(f"\nTest Episode {i + 1}:")
-        print(f"Start State: {start_state}")
-        print(f"End State:   {end_state}")
-        print(f"Total Steps: {steps}")
-        print(f"Total Reward: {total_reward:.2f}")
-
-        rewards.append(total_reward)
-        num_steps.append(steps)
-        reasons[reason] += 1
-
-
-    print("\nOverall Metrics")
-    print(f"Average Cumulative Reward: {sum(rewards)/len(rewards)}")
-    print(f"Average number of timesteps: {sum(num_steps)/len(num_steps)}")
-    print_counter_table(reasons)
 
 if __name__ == "__main__":
     main()

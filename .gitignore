@@ -3,3 +3,4 @@
 !.gitignore
 /python/runs
 /python/models
+__pycache__
