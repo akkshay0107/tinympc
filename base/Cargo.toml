@@ -2,6 +2,7 @@
 name = "base"
 version = "0.1.0"
 edition = "2024"
+default-run = "controlled_sim"
 
 [features]
 default = []
@@ -18,3 +19,11 @@ serde_derive = "1.0"
 ndarray = "0.16.1"
 rand_distr = "0.5.1"
 ort = "2.0.0-rc.10"
+
+[[bin]]
+name = "base"
+path = "src/main.rs"
+
+[[bin]]
+name = "controlled_sim"
+path = "src/bin/controlled_sim.rs"
