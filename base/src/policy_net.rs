@@ -39,6 +39,17 @@ impl PolicyNet {
 
         Ok((mean, std))
     }
+
+    /// Get raw action from forward pass and convert it into a valid control
+    pub fn get_action(
+        &mut self,
+        input: Vec<f32>,
+        input_shape: Vec<usize>,
+    ) -> Result<Vec<f32>, Box<dyn Error>> {
+        let (mean, _) = self.forward(input, input_shape).unwrap(); // std not required during inference
+        let action: Vec<f32> = mean.into_iter().map(|x| x.tanh()).collect();
+        Ok(action)
+    }
 }
 
 #[cfg(test)]
@@ -57,5 +68,18 @@ mod tests {
         println!("{:?}", mean);
         assert_eq!(mean.len(), act_dim);
         assert_eq!(std.len(), act_dim);
+    }
+
+    #[test]
+    fn test_policy_net_get_action() {
+        let mut net = PolicyNet::new("../python/models/policy_net.onnx").unwrap();
+        let obs_dim = 6;
+        let act_dim = 2;
+        let input_shape = vec![1, obs_dim]; // batch size 1
+        let input = vec![0.0; obs_dim];
+
+        let action = net.get_action(input, input_shape).unwrap();
+        println!("{:?}", action);
+        assert_eq!(action.len(), act_dim);
     }
 }
