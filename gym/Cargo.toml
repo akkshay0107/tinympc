@@ -1,0 +1,14 @@
+[package]
+name = "gym"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "gym"
+crate-type = ["cdylib"]
+
+[dependencies]
+base = { path = "../base" }
+pyo3 = { version = "0.22.2", features = ["extension-module"] }
+rapier2d = { workspace = true }
+rand = { workspace = true }

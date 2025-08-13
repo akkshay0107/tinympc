@@ -8,15 +8,17 @@
 use macroquad::prelude::*;
 use rapier2d::prelude::*;
 
+use crate::constants::MAX_GIMBAL_ANGLE;
 const PIXELS_PER_METER: f32 = 10.0;
 
 const GROUND_RESTITUTION: f32 = 0.5;
 const ROCKET_RESTITUTION: f32 = 0.1;
 const ROCKET_MASS: f32 = 1.0;
 const GROUND_SIZE: Vector<f32> = vector![40.0, 6.0];
-const DRAG_COEFFICIENT: f32 = 0.4;
+const ANGULAR_DRAG_COEFFICIENT: f32 = 4.0;
+const LINEAR_DRAG_COEFFICIENT: f32 = 2.5;
 
-pub const MAX_THRUST: f32 = 10.0; // Each thruster alone can offset gravity
+pub const MAX_THRUST: f32 = 15.0; // Thruster can offset gravity
 pub const ROCKET_WIDTH: f32 = 20.0;
 pub const ROCKET_HEIGHT: f32 = 40.0;
 
@@ -100,8 +102,8 @@ impl World {
     ) -> RigidBodyHandle {
         let rocket_body = RigidBodyBuilder::dynamic()
             .translation(position)
-            .linear_damping(DRAG_COEFFICIENT)
-            .angular_damping(DRAG_COEFFICIENT)
+            .linear_damping(LINEAR_DRAG_COEFFICIENT)
+            .angular_damping(ANGULAR_DRAG_COEFFICIENT)
             .build();
         let rocket_handle = rigid_body_set.insert(rocket_body);
 
@@ -135,53 +137,61 @@ impl World {
         );
     }
 
-    pub fn apply_thruster_forces(&mut self, left_thruster_input: f32, right_thruster_input: f32) {
-        let left_thruster = left_thruster_input.clamp(0.0, MAX_THRUST);
-        let right_thruster = right_thruster_input.clamp(0.0, MAX_THRUST);
+    pub fn apply_thruster_forces(&mut self, thrust: f32, gimbal_angle: f32) {
+        // Both thrust and gimbal angle assumed to be normalized
+        if thrust < -1.0 || thrust > 1.0 {
+            panic!(
+                "Thrust isn't in the normalized range. Normalize thrust to [-1, 1] before passing it."
+            )
+        }
 
-        if left_thruster == 0.0 && right_thruster == 0.0 {
+        if gimbal_angle < -1.0 || gimbal_angle > 1.0 {
+            panic!(
+                "Gimbal angle isn't in the normalized range. Normalize thrust to [-1, 1] before passing it."
+            )
+        }
+
+        if thrust == 0.0 {
             return;
         }
 
-        let rocket_body = &mut self.rigid_body_set[self.rocket_body_handle];
-        let body_angle = rocket_body.rotation().angle();
+        let raw_thrust = (MAX_THRUST * (1.0 + thrust)) / 2.0;
+        let raw_gimbal_angle = gimbal_angle * MAX_GIMBAL_ANGLE;
 
-        let total_thrust = left_thruster + right_thruster;
-        // Result from multiplying rotation matrix of the body angle
-        // with the upward force in the frame of the rocket
-        let net_force = vector![
-            total_thrust * body_angle.sin(),
-            total_thrust * body_angle.cos()
+        let rocket_body = self
+            .rigid_body_set
+            .get_mut(self.rocket_body_handle)
+            .unwrap();
+        let angle_from_vertical = raw_gimbal_angle + rocket_body.rotation().angle();
+
+        // Find thrust in world coordinates
+        let thrust_force_world = vector![
+            raw_thrust * angle_from_vertical.sin(),
+            raw_thrust * angle_from_vertical.cos()
         ];
-        // Equivalent to setting the force of the rocket body
+
+        // equivalent to updating force
         rocket_body.reset_forces(true);
-        rocket_body.add_force(net_force, true);
+        rocket_body.add_force(thrust_force_world, true);
 
-        let up = vector![0.0, 1.0];
-        let half_width = ROCKET_WIDTH / PIXELS_PER_METER / 2.0;
-        let half_height = ROCKET_HEIGHT / PIXELS_PER_METER / 2.0;
-        let left_thruster_offset = vector![-half_width, half_height];
-        let right_thruster_offset = vector![half_width, half_height];
+        // Find torque on rocket body
+        let y_offset = ROCKET_HEIGHT / (4.0 * PIXELS_PER_METER); // quarter height
+        let offset = (0.0, -y_offset);
+        let thrust_force_body = (
+            raw_thrust * raw_gimbal_angle.sin(),
+            raw_thrust * raw_gimbal_angle.cos(),
+        );
 
-        let mut total_torque = 0.0;
-        if left_thruster != 0.0 {
-            total_torque += Self::calculate_torque(left_thruster_offset, left_thruster * up);
-        }
-        if right_thruster != 0.0 {
-            total_torque += Self::calculate_torque(right_thruster_offset, right_thruster * up);
-        }
-
-        if total_torque != 0.0 {
-            // Minus sign as angle measured clockwise in rapier
-            // which is opposite of the convention used for torque calculation
+        let torque = Self::cross_product(offset, thrust_force_body);
+        if torque != 0.0 {
             rocket_body.reset_torques(true);
-            rocket_body.add_torque(-total_torque, true);
+            rocket_body.add_torque(torque, true);
         }
     }
 
-    fn calculate_torque(offset: Vector<f32>, force: Vector<f32>) -> f32 {
-        // Cross product in 2d (torque = r cross F)
-        offset.x * force.y - offset.y * force.x
+    fn cross_product(a: (f32, f32), b: (f32, f32)) -> f32 {
+        // k component of a cross b where a and b lie in the xy plane
+        a.0 * b.1 - a.1 * b.0
     }
 
     pub fn get_rocket_state(&self) -> (f32, f32, f32) {
@@ -258,6 +268,7 @@ impl World {
         // Reset angular velocity when drag ends
         if let Some(rocket_body) = self.rigid_body_set.get_mut(self.rocket_body_handle) {
             rocket_body.set_angvel(0.0, true);
+            rocket_body.set_linvel(vector![0.0, 0.0], true);
         }
     }
 }

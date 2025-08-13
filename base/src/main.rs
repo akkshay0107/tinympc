@@ -1,7 +1,8 @@
+// TODO: fix imports to not be hardcoded to crate name
+use base::game::{DRAG_POINTER_COLOR, DRAG_POINTER_RADIUS, Game};
+use base::world::{World, pixel_to_world, world_to_pixel};
 use macroquad::prelude::*;
 use rapier2d::prelude::*;
-use tinympc::game::{DRAG_POINTER_COLOR, DRAG_POINTER_RADIUS, Game};
-use tinympc::world::{World, pixel_to_world, world_to_pixel};
 
 #[macroquad::main("Uncontrolled Sim")]
 async fn main() {
@@ -24,8 +25,8 @@ async fn main() {
             world.end_drag();
         }
 
-        let (_, _, _, (left_thruster, right_thruster)) = game.rocket.get_state();
-        world.apply_thruster_forces(left_thruster, right_thruster);
+        let (_, _, _, (mut thrust, mut gimbal_angle)) = game.rocket.get_state();
+        world.apply_thruster_forces(thrust, gimbal_angle);
         world.step();
 
         let (rocket_x, rocket_y, rocket_angle) = world.get_rocket_state();
@@ -52,8 +53,39 @@ async fn main() {
             );
         }
 
-        game.rocket
-            .set_state(px_rocket_x, px_rocket_y, rocket_angle, (4.5, 4.5));
+        #[cfg(feature = "keyinput")]
+        {
+            let step: f32 = 0.05;
+            if is_key_down(KeyCode::Up) {
+                thrust += step;
+            } else if is_key_down(KeyCode::Down) {
+                thrust -= step;
+            }
+
+            if is_key_down(KeyCode::Left) {
+                gimbal_angle -= step;
+            } else if is_key_down(KeyCode::Right) {
+                gimbal_angle += step;
+            }
+
+            thrust = thrust.clamp(-1.0, 1.0);
+            gimbal_angle = gimbal_angle.clamp(-1.0, 1.0);
+
+            #[cfg(feature = "logging")]
+            {
+                println!(
+                    "Thrusters - Thrust: {:.2}, Angle: {:.2}",
+                    thrust, gimbal_angle
+                );
+            }
+        }
+
+        game.rocket.set_state(
+            px_rocket_x,
+            px_rocket_y,
+            rocket_angle,
+            (thrust, gimbal_angle),
+        );
 
         game.draw();
         game.rocket.draw();
