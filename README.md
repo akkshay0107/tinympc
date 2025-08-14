@@ -46,14 +46,14 @@ The project is divided into three main parts:
 
     ```bash
     git clone https://github.com/akkshay0107/tinympc.git
-     cd tinympc
+    cd tinympc
     ```
 
 2.  **Set up python venv inside poetry and install dependencies:**
 
     ```bash
     cd python
-     poetry install
+    poetry install
     ```
 
 ## Usage
@@ -88,6 +88,8 @@ Then, run the simulation with the following command from the project root:
 ```bash
 cargo run --bin controlled_sim --release
 ```
+
+In the simulation, the rocket starts at a random position and tries to land the rocket safely. The rocket can then be clicked and dragged to different locations on the screen to see how the model reacts to the rocket being dropped from that location.
 
 Additionally, the simulation can also be run with keyboard inputs (instead of the model providing controls). For this, from the project root, run:
 

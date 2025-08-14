@@ -123,9 +123,9 @@ impl PyEnvironment {
 
     fn calculate_reward(&self, x: f32, y: f32, theta: f32, vx: f32, vy: f32, omega: f32) -> f32 {
         let dy = y - _MIN_POS_Y;
-        let dist_penalty = -1e-2 * dy.powi(2);
-        let vel_penalty = -1e-2 * (vx.powi(2) + vy.powi(2));
-        let swaying_penalty = -5e-2 * vx.powi(2);
+        let dx = x - (MAX_POS_X / 2.0); // half max pos x is the middle
+        let dist_penalty = -1e-2 * (dy.powi(2) + dx.powi(2));
+        let vel_penalty = -2e-2 * (vx.powi(2) + vy.powi(2));
         let angle_penalty = -5.0 * theta.powi(2);
         let ang_vel_penalty = -5.0 * omega.powi(2);
 
@@ -153,7 +153,6 @@ impl PyEnvironment {
 
         (dist_penalty
             + vel_penalty
-            + swaying_penalty
             + angle_penalty
             + ang_vel_penalty
             + downward_progress_reward

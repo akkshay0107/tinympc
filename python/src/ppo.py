@@ -6,15 +6,27 @@ import numpy as np
 
 from gym import PyEnvironment
 
+def _init_layer(linear: nn.Linear, gain: float):
+    nn.init.orthogonal_(linear.weight, gain) # type: ignore
+    nn.init.constant_(linear.bias, 0.0)
+
 class PolicyNet(nn.Module):
     def __init__(self, obs_dim, act_dim):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(obs_dim, 64), nn.Tanh(),
-            nn.Linear(64, 64), nn.Tanh(),
+            nn.Linear(obs_dim, 64),
+            nn.ReLU(),
+            nn.Linear(64, 64),
+            nn.ReLU(),
         )
         self.mean_layer = nn.Linear(64, act_dim)
         self.log_std = nn.Parameter(torch.zeros(act_dim))  # std is learnable
+
+        gain = nn.init.calculate_gain('relu')
+        for layer in self.net:
+            if isinstance(layer, nn.Linear):
+                _init_layer(layer, gain)
+        _init_layer(self.mean_layer, 0.01)
 
     def forward(self, obs):
         x = self.net(obs)
@@ -30,10 +42,17 @@ class ValueNet(nn.Module):
     def __init__(self, obs_dim):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(obs_dim, 64), nn.Tanh(),
-            nn.Linear(64, 64), nn.Tanh(),
+            nn.Linear(obs_dim, 64),
+            nn.ReLU(),
+            nn.Linear(64, 64),
+            nn.ReLU(),
             nn.Linear(64, 1),
         )
+
+        gain = nn.init.calculate_gain('relu')
+        for layer in self.net:
+            if isinstance(layer, nn.Linear):
+                _init_layer(layer, gain)
 
     def forward(self, obs):
         return self.net(obs).squeeze(-1)
@@ -57,34 +76,28 @@ class PPOAgent:
         if not rewards:
             return float("-inf")
 
-        med = np.median(rewards)
-        var = np.var(rewards)
-        return med - var_coef * var
+        return np.mean(rewards) - var_coef * np.var(rewards)
 
     @staticmethod
     def _unsquash_action(bounded_action):
         # action from buffer, already in [-1,1]
         eps = torch.finfo(bounded_action.dtype).eps
         tanh_action = torch.clamp(bounded_action, -1.0 + eps, 1.0 - eps)
-        # Stable atanh calc
-        return 0.5 * (torch.log1p(tanh_action) - torch.log1p(-tanh_action))
+        return torch.atanh(tanh_action)
 
     @staticmethod
     def _tanh_log_prob(dist, raw_action, tanh_action):
         log_prob = dist.log_prob(raw_action) - torch.log(1 - tanh_action.pow(2) + 1e-6)
         return log_prob.sum(dim=-1)
 
-    @staticmethod
-    def _compute_gae(rewards, values, dones, gamma=0.99, lam=0.95):
-        advantages = []
+    def _compute_gae(self, rewards, values, dones):
+        advantages = torch.zeros((len(rewards),))
         gae = 0
         for t in reversed(range(len(rewards))):
-            delta = rewards[t] + gamma * values[t + 1] * (1 - dones[t]) - values[t]
-            gae = delta + gamma * lam * (1 - dones[t]) * gae
-            advantages.append(gae)  # Append instead of insert in front
-        advantages.reverse()  # Reverse once at the end to preserve O(n) complexity
+            delta = rewards[t] + self.gamma * values[t + 1] * (1 - dones[t]) - values[t]
+            gae = delta + self.gamma * self.lam * (1 - dones[t]) * gae
+            advantages[t] = gae
         return advantages
-
 
     def select_action(self, obs):
         obs_t = torch.FloatTensor(obs).unsqueeze(0)
@@ -167,7 +180,7 @@ class PPOAgent:
             # rew_std = rew_batch.std() + 1e-6
             # rew_batch = ((rew_batch - rew_mean) / rew_std).tolist()
 
-            advantages = self._compute_gae(rew_batch, val_batch + [last_val], done_batch, self.gamma, self.lam)
+            advantages = self._compute_gae(rew_batch, val_batch + [last_val], done_batch)
             returns = [adv + val for adv, val in zip(advantages, val_batch)]
 
             obs_tensor = torch.as_tensor(np.array(obs_batch), dtype=torch.float32)
