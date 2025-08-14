@@ -1,8 +1,5 @@
 use macroquad::prelude::*;
 
-pub const GROUND_CRUST_COLOR: Color = Color::new(0.4, 0.2, 0.1, 1.0); // Darker than interior
-pub const GROUND_INTERIOR_COLOR: Color = Color::new(0.6, 0.4, 0.2, 1.0); // Tan color
-pub const GROUND_CRUST_THICKNESS: f32 = 10.0;
 pub const PARALLAX_SCROLL_SPEED: f32 = 0.08;
 
 pub const DRAG_POINTER_COLOR: Color = Color::new(1.0, 1.0, 0.0, 1.0);
@@ -85,38 +82,54 @@ impl Game {
         let screen_h = screen_height();
         let ground_y = screen_h * 0.8;
 
-        draw_rectangle(
-            0.0,
-            ground_y,
-            screen_w,
-            GROUND_CRUST_THICKNESS,
-            GROUND_CRUST_COLOR,
-        );
-        let base_color = GROUND_INTERIOR_COLOR;
+        let base_color = Color::from_rgba(74, 48, 30, 255);
+        let shadow_color = Color::from_rgba(57, 36, 23, 255);
+        let grass_color = Color::from_rgba(43, 86, 29, 255);
+        let grass_edge_color = Color::from_rgba(34, 69, 20, 255);
 
-        // Draw in texture in the interior of the ground
-        for y in ((ground_y + GROUND_CRUST_THICKNESS) as i32..screen_h as i32).step_by(4) {
-            for x in (0..screen_w as i32).step_by(4) {
-                // Simple noise function based on position
-                // Combines three different sine waves and a stable pattern
-                // to create a more complex noise pattern
-                let n1 = (x as f32 * 0.1).sin();
-                let n2 = (y as f32 * 0.07).cos();
-                let n3 = ((x as f32 * 0.05 + y as f32 * 0.05).sin() * 2.0).sin();
-                let noise = (n1 * 0.3 + n2 * 0.2 + n3 * 0.5).abs() * 0.03;
+        let block_size = 16.0;
 
-                let stable = ((x as i32 + y * 12345 as i32) % 100) as f32 / 600.0;
-                let noise = (noise + stable).min(0.06);
+        for x in (0..screen_w as i32).step_by(block_size as usize) {
+            let top_y = ground_y;
 
-                let color = Color::new(
-                    (base_color.r - noise * 1.0).max(0.0),
-                    (base_color.g - noise * 0.7).max(0.0),
-                    (base_color.b - noise * 0.4).max(0.0),
-                    base_color.a,
-                );
+            // Draw the top grass block
+            draw_rectangle(x as f32, top_y, block_size, block_size, grass_color);
+            draw_rectangle(
+                x as f32,
+                top_y + block_size - 4.0,
+                block_size,
+                4.0,
+                grass_edge_color,
+            );
 
-                draw_rectangle(x as f32, y as f32, 4.0, 4.0, color);
+            for y in ((top_y + block_size) as i32..screen_h as i32).step_by(block_size as usize) {
+                let noise_val = (x as f32 * 0.1).sin() + (y as f32 * 0.07).cos();
+                let color = if noise_val > 0.0 {
+                    base_color
+                } else {
+                    shadow_color
+                };
+                draw_rectangle(x as f32, y as f32, block_size, block_size, color);
             }
+        }
+
+        let ground_height = screen_h - ground_y;
+        let num_steps = 20;
+        let step_height = ground_height / num_steps as f32;
+        let shine_top = Color::new(0.1, 0.1, 0.3, 0.2); // More shine at the top
+        let shine_bottom = Color::new(0.05, 0.05, 0.15, 0.0); // Fades out
+
+        for i in 0..num_steps {
+            let y_pos = ground_y + i as f32 * step_height;
+            let t = i as f32 / (num_steps - 1) as f32;
+            let interpolated_color = Color {
+                r: shine_top.r * (1.0 - t) + shine_bottom.r * t,
+                g: shine_top.g * (1.0 - t) + shine_bottom.g * t,
+                b: shine_top.b * (1.0 - t) + shine_bottom.b * t,
+                a: shine_top.a * (1.0 - t) + shine_bottom.a * t,
+            };
+            // 1.0 + step_height to avoid gaps
+            draw_rectangle(0.0, y_pos, screen_w, step_height + 1.0, interpolated_color);
         }
     }
 

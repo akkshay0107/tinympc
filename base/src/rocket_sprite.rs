@@ -13,6 +13,34 @@ const FLAME_MAX_LENGTH: f32 = 12.0;
 const FLAME_WIDTH: f32 = 6.0;
 const WINDOW_RADIUS: f32 = 2.5;
 
+const BODY_BASE_COLOR: Color = Color::from_rgba(180, 180, 190, 255);
+const BODY_HIGHLIGHT_COLOR: Color = Color::from_rgba(220, 220, 235, 255);
+const BODY_SHADOW_COLOR: Color = Color::from_rgba(140, 140, 150, 255);
+
+const THRUSTER_BASE_COLOR: Color = Color::from_rgba(160, 160, 170, 255);
+const THRUSTER_HIGHLIGHT_COLOR: Color = Color::from_rgba(190, 190, 200, 255);
+const THRUSTER_SHADOW_COLOR: Color = Color::from_rgba(130, 130, 140, 255);
+
+const NOSE_HIGHLIGHT_COLOR: Color = Color {
+    r: 200.0 / 255.0,
+    g: 200.0 / 255.0,
+    b: 210.0 / 255.0,
+    a: 120.0 / 255.0,
+};
+
+const WINDOW_FRAME_COLOR: Color = Color::from_rgba(160, 160, 170, 255);
+const WINDOW_GLASS_COLOR: Color = Color::from_rgba(20, 30, 60, 255);
+const WINDOW_REFLECTION_COLOR: Color = Color {
+    r: 150.0 / 255.0,
+    g: 180.0 / 255.0,
+    b: 220.0 / 255.0,
+    a: 180.0 / 255.0,
+};
+
+const FLAME_OUTER_COLOR: Color = RED;
+const FLAME_MIDDLE_COLOR: Color = ORANGE;
+const FLAME_CORE_COLOR: Color = YELLOW;
+
 pub struct RocketSprite {
     x: f32,
     y: f32,
@@ -77,8 +105,7 @@ impl RocketSprite {
     }
 
     fn draw_metallic_thruster(&self, vertices: &[Vec2], center: Vec2, is_left: bool) {
-        let base_color = Color::from_rgba(160, 160, 170, 255);
-        self.draw_rotated_polygon(vertices, center, base_color);
+        self.draw_rotated_polygon(vertices, center, THRUSTER_BASE_COLOR);
 
         let thruster_width = ROCKET_WIDTH * THRUSTER_WIDTH_RATIO;
         let half_width = ROCKET_WIDTH / 2.0;
@@ -86,7 +113,6 @@ impl RocketSprite {
         let thruster_height = ROCKET_HEIGHT * THRUSTER_HEIGHT_RATIO;
 
         if is_left {
-            // Left thruster highlight
             let highlight_vertices = [
                 vec2(-half_width - thruster_width, half_height - thruster_height),
                 vec2(
@@ -96,13 +122,8 @@ impl RocketSprite {
                 vec2(-half_width - thruster_width * 0.4, half_height),
                 vec2(-half_width - thruster_width, half_height),
             ];
-            self.draw_rotated_polygon(
-                &highlight_vertices,
-                center,
-                Color::from_rgba(190, 190, 200, 255),
-            );
+            self.draw_rotated_polygon(&highlight_vertices, center, THRUSTER_HIGHLIGHT_COLOR);
 
-            // Left thruster shadow
             let shadow_vertices = [
                 vec2(
                     -half_width - thruster_width * 0.2,
@@ -112,13 +133,8 @@ impl RocketSprite {
                 vec2(-half_width, half_height),
                 vec2(-half_width - thruster_width * 0.2, half_height),
             ];
-            self.draw_rotated_polygon(
-                &shadow_vertices,
-                center,
-                Color::from_rgba(130, 130, 140, 255),
-            );
+            self.draw_rotated_polygon(&shadow_vertices, center, THRUSTER_SHADOW_COLOR);
         } else {
-            // Right thruster highlight
             let highlight_vertices = [
                 vec2(half_width, half_height - thruster_height),
                 vec2(
@@ -128,13 +144,8 @@ impl RocketSprite {
                 vec2(half_width + thruster_width * 0.4, half_height),
                 vec2(half_width, half_height),
             ];
-            self.draw_rotated_polygon(
-                &highlight_vertices,
-                center,
-                Color::from_rgba(190, 190, 200, 255),
-            );
+            self.draw_rotated_polygon(&highlight_vertices, center, THRUSTER_HIGHLIGHT_COLOR);
 
-            // Right thruster shadow
             let shadow_vertices = [
                 vec2(
                     half_width + thruster_width * 0.6,
@@ -144,11 +155,7 @@ impl RocketSprite {
                 vec2(half_width + thruster_width, half_height),
                 vec2(half_width + thruster_width * 0.6, half_height),
             ];
-            self.draw_rotated_polygon(
-                &shadow_vertices,
-                center,
-                Color::from_rgba(130, 130, 140, 255),
-            );
+            self.draw_rotated_polygon(&shadow_vertices, center, THRUSTER_SHADOW_COLOR);
         }
     }
 
@@ -158,13 +165,14 @@ impl RocketSprite {
         let nose_radius = half_width;
 
         let mut body_vertices = Vec::new();
+
         // Add points for the rounded top (semicircle)
         let segments = 8;
         for i in 0..=segments {
             let angle = std::f32::consts::PI * i as f32 / segments as f32;
             let x = nose_radius * angle.cos();
             let y = -half_height + nose_radius * (1.0 - angle.sin());
-            body_vertices.push(vec2(-x, y)); // Left side of semicircle
+            body_vertices.push(vec2(-x, y));
         }
 
         // Add straight sides and bottom
@@ -172,7 +180,7 @@ impl RocketSprite {
         body_vertices.push(vec2(-half_width, half_height));
 
         // Draw main body
-        self.draw_rotated_polygon(&body_vertices, center, Color::from_rgba(180, 180, 190, 255));
+        self.draw_rotated_polygon(&body_vertices, center, BODY_BASE_COLOR);
 
         // Draw metallic highlight on left side
         let highlight_vertices = [
@@ -181,11 +189,7 @@ impl RocketSprite {
             vec2(-half_width * 0.3, half_height),
             vec2(-half_width, half_height),
         ];
-        self.draw_rotated_polygon(
-            &highlight_vertices,
-            center,
-            Color::from_rgba(220, 220, 235, 255),
-        );
+        self.draw_rotated_polygon(&highlight_vertices, center, BODY_HIGHLIGHT_COLOR);
 
         // Draw shadow on right side
         let shadow_vertices = [
@@ -194,11 +198,7 @@ impl RocketSprite {
             vec2(half_width, half_height),
             vec2(half_width * 0.3, half_height),
         ];
-        self.draw_rotated_polygon(
-            &shadow_vertices,
-            center,
-            Color::from_rgba(140, 140, 150, 255),
-        );
+        self.draw_rotated_polygon(&shadow_vertices, center, BODY_SHADOW_COLOR);
 
         self.draw_rounded_nose_highlight(center, nose_radius);
     }
@@ -218,7 +218,7 @@ impl RocketSprite {
             nose_center_world.x,
             nose_center_world.y,
             radius * 0.6,
-            Color::from_rgba(200, 200, 210, 120),
+            NOSE_HIGHLIGHT_COLOR,
         );
     }
 
@@ -237,13 +237,13 @@ impl RocketSprite {
             window_world.x,
             window_world.y,
             WINDOW_RADIUS + 0.5,
-            Color::from_rgba(160, 160, 170, 255),
+            WINDOW_FRAME_COLOR,
         );
         draw_circle(
             window_world.x,
             window_world.y,
             WINDOW_RADIUS,
-            Color::from_rgba(20, 30, 60, 255),
+            WINDOW_GLASS_COLOR,
         );
 
         let highlight_offset = vec2(-0.8, -0.8);
@@ -255,7 +255,7 @@ impl RocketSprite {
             highlight_world.x,
             highlight_world.y,
             0.8,
-            Color::from_rgba(150, 180, 220, 180),
+            WINDOW_REFLECTION_COLOR,
         );
     }
 
@@ -264,7 +264,7 @@ impl RocketSprite {
         let flame_length = FLAME_MAX_LENGTH * self.thrust.abs();
         let flame_half_width = FLAME_WIDTH / 2.0;
 
-        let gimbal_effect = self.gimbal_angle * 0.1; // limit gimbal angle
+        let gimbal_effect = self.gimbal_angle * 0.1;
         let total_angle = self.angle + gimbal_effect;
 
         let flame_vertices = [
@@ -285,9 +285,14 @@ impl RocketSprite {
             vec2(0.0, half_height + flame_length * 0.6),
         ];
 
-        self.draw_rotated_flame(&flame_vertices, center, total_angle, RED);
-        self.draw_rotated_flame(&inner_flame_vertices, center, total_angle, ORANGE);
-        self.draw_rotated_flame(&core_flame_vertices, center, total_angle, YELLOW);
+        self.draw_rotated_flame(&flame_vertices, center, total_angle, FLAME_OUTER_COLOR);
+        self.draw_rotated_flame(
+            &inner_flame_vertices,
+            center,
+            total_angle,
+            FLAME_MIDDLE_COLOR,
+        );
+        self.draw_rotated_flame(&core_flame_vertices, center, total_angle, FLAME_CORE_COLOR);
     }
 
     fn draw_rotated_flame(&self, vertices: &[Vec2], center: Vec2, angle: f32, color: Color) {
