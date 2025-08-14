@@ -9,6 +9,9 @@ pub const ROCKET_WIDTH: f32 = 10.0;
 pub const ROCKET_HEIGHT: f32 = 40.0;
 const THRUSTER_WIDTH_RATIO: f32 = 0.4;
 const THRUSTER_HEIGHT_RATIO: f32 = 0.4;
+const FLAME_MAX_LENGTH: f32 = 12.0;
+const FLAME_WIDTH: f32 = 6.0;
+const WINDOW_RADIUS: f32 = 2.5;
 
 pub struct RocketSprite {
     x: f32,
@@ -46,16 +49,7 @@ impl RocketSprite {
         let half_height = ROCKET_HEIGHT / 2.0;
         let thruster_width = ROCKET_WIDTH * THRUSTER_WIDTH_RATIO;
         let thruster_height = ROCKET_HEIGHT * THRUSTER_HEIGHT_RATIO;
-
         let center = vec2(self.x, self.y);
-
-        // Define all polygon vertices relative to center
-        let body_vertices = [
-            vec2(-half_width, -half_height),
-            vec2(half_width, -half_height),
-            vec2(half_width, half_height),
-            vec2(-half_width, half_height),
-        ];
 
         let left_thruster_vertices = [
             vec2(-half_width - thruster_width, half_height - thruster_height),
@@ -71,16 +65,235 @@ impl RocketSprite {
             vec2(half_width, half_height),
         ];
 
-        self.draw_rotated_polygon(&body_vertices, center, GRAY);
-        self.draw_rotated_polygon(&left_thruster_vertices, center, GRAY);
-        self.draw_rotated_polygon(&right_thruster_vertices, center, GRAY);
+        // Draw flame effect behind rocket
+        if self.thrust != -1.0 {
+            self.draw_flame_effect(center);
+        }
+
+        self.draw_metallic_body(center);
+        self.draw_metallic_thruster(&left_thruster_vertices, center, true);
+        self.draw_metallic_thruster(&right_thruster_vertices, center, false);
+        self.draw_window(center);
     }
 
-    fn draw_rotated_polygon(&self, vertices: &[Vec2], center: Vec2, color: Color) {
+    fn draw_metallic_thruster(&self, vertices: &[Vec2], center: Vec2, is_left: bool) {
+        let base_color = Color::from_rgba(160, 160, 170, 255);
+        self.draw_rotated_polygon(vertices, center, base_color);
+
+        let thruster_width = ROCKET_WIDTH * THRUSTER_WIDTH_RATIO;
+        let half_width = ROCKET_WIDTH / 2.0;
+        let half_height = ROCKET_HEIGHT / 2.0;
+        let thruster_height = ROCKET_HEIGHT * THRUSTER_HEIGHT_RATIO;
+
+        if is_left {
+            // Left thruster highlight
+            let highlight_vertices = [
+                vec2(-half_width - thruster_width, half_height - thruster_height),
+                vec2(
+                    -half_width - thruster_width * 0.4,
+                    half_height - thruster_height,
+                ),
+                vec2(-half_width - thruster_width * 0.4, half_height),
+                vec2(-half_width - thruster_width, half_height),
+            ];
+            self.draw_rotated_polygon(
+                &highlight_vertices,
+                center,
+                Color::from_rgba(190, 190, 200, 255),
+            );
+
+            // Left thruster shadow
+            let shadow_vertices = [
+                vec2(
+                    -half_width - thruster_width * 0.2,
+                    half_height - thruster_height,
+                ),
+                vec2(-half_width, half_height - thruster_height),
+                vec2(-half_width, half_height),
+                vec2(-half_width - thruster_width * 0.2, half_height),
+            ];
+            self.draw_rotated_polygon(
+                &shadow_vertices,
+                center,
+                Color::from_rgba(130, 130, 140, 255),
+            );
+        } else {
+            // Right thruster highlight
+            let highlight_vertices = [
+                vec2(half_width, half_height - thruster_height),
+                vec2(
+                    half_width + thruster_width * 0.4,
+                    half_height - thruster_height,
+                ),
+                vec2(half_width + thruster_width * 0.4, half_height),
+                vec2(half_width, half_height),
+            ];
+            self.draw_rotated_polygon(
+                &highlight_vertices,
+                center,
+                Color::from_rgba(190, 190, 200, 255),
+            );
+
+            // Right thruster shadow
+            let shadow_vertices = [
+                vec2(
+                    half_width + thruster_width * 0.6,
+                    half_height - thruster_height,
+                ),
+                vec2(half_width + thruster_width, half_height - thruster_height),
+                vec2(half_width + thruster_width, half_height),
+                vec2(half_width + thruster_width * 0.6, half_height),
+            ];
+            self.draw_rotated_polygon(
+                &shadow_vertices,
+                center,
+                Color::from_rgba(130, 130, 140, 255),
+            );
+        }
+    }
+
+    fn draw_metallic_body(&self, center: Vec2) {
+        let half_width = ROCKET_WIDTH / 2.0;
+        let half_height = ROCKET_HEIGHT / 2.0;
+        let nose_radius = half_width;
+
+        let mut body_vertices = Vec::new();
+        // Add points for the rounded top (semicircle)
+        let segments = 8;
+        for i in 0..=segments {
+            let angle = std::f32::consts::PI * i as f32 / segments as f32;
+            let x = nose_radius * angle.cos();
+            let y = -half_height + nose_radius * (1.0 - angle.sin());
+            body_vertices.push(vec2(-x, y)); // Left side of semicircle
+        }
+
+        // Add straight sides and bottom
+        body_vertices.push(vec2(half_width, half_height));
+        body_vertices.push(vec2(-half_width, half_height));
+
+        // Draw main body
+        self.draw_rotated_polygon(&body_vertices, center, Color::from_rgba(180, 180, 190, 255));
+
+        // Draw metallic highlight on left side
+        let highlight_vertices = [
+            vec2(-half_width, -half_height + nose_radius),
+            vec2(-half_width * 0.3, -half_height + nose_radius),
+            vec2(-half_width * 0.3, half_height),
+            vec2(-half_width, half_height),
+        ];
+        self.draw_rotated_polygon(
+            &highlight_vertices,
+            center,
+            Color::from_rgba(220, 220, 235, 255),
+        );
+
+        // Draw shadow on right side
+        let shadow_vertices = [
+            vec2(half_width * 0.3, -half_height + nose_radius),
+            vec2(half_width, -half_height + nose_radius),
+            vec2(half_width, half_height),
+            vec2(half_width * 0.3, half_height),
+        ];
+        self.draw_rotated_polygon(
+            &shadow_vertices,
+            center,
+            Color::from_rgba(140, 140, 150, 255),
+        );
+
+        self.draw_rounded_nose_highlight(center, nose_radius);
+    }
+
+    fn draw_rounded_nose_highlight(&self, center: Vec2, radius: f32) {
+        let half_height = ROCKET_HEIGHT / 2.0;
+        let nose_center_local = vec2(0.0, -half_height + radius);
+
         let cos_a = self.angle.cos();
         let sin_a = self.angle.sin();
+        let nose_center_world = vec2(
+            nose_center_local.x * cos_a - nose_center_local.y * sin_a + center.x,
+            nose_center_local.x * sin_a + nose_center_local.y * cos_a + center.y,
+        );
 
-        // Transform vertices to world coordinates
+        draw_circle(
+            nose_center_world.x,
+            nose_center_world.y,
+            radius * 0.6,
+            Color::from_rgba(200, 200, 210, 120),
+        );
+    }
+
+    fn draw_window(&self, center: Vec2) {
+        let window_offset_y = -ROCKET_HEIGHT * 0.15;
+        let window_local = vec2(0.0, window_offset_y);
+
+        let cos_a = self.angle.cos();
+        let sin_a = self.angle.sin();
+        let window_world = vec2(
+            window_local.x * cos_a - window_local.y * sin_a + center.x,
+            window_local.x * sin_a + window_local.y * cos_a + center.y,
+        );
+
+        draw_circle(
+            window_world.x,
+            window_world.y,
+            WINDOW_RADIUS + 0.5,
+            Color::from_rgba(160, 160, 170, 255),
+        );
+        draw_circle(
+            window_world.x,
+            window_world.y,
+            WINDOW_RADIUS,
+            Color::from_rgba(20, 30, 60, 255),
+        );
+
+        let highlight_offset = vec2(-0.8, -0.8);
+        let highlight_world = vec2(
+            highlight_offset.x * cos_a - highlight_offset.y * sin_a + window_world.x,
+            highlight_offset.x * sin_a + highlight_offset.y * cos_a + window_world.y,
+        );
+        draw_circle(
+            highlight_world.x,
+            highlight_world.y,
+            0.8,
+            Color::from_rgba(150, 180, 220, 180),
+        );
+    }
+
+    fn draw_flame_effect(&self, center: Vec2) {
+        let half_height = ROCKET_HEIGHT / 2.0;
+        let flame_length = FLAME_MAX_LENGTH * self.thrust.abs();
+        let flame_half_width = FLAME_WIDTH / 2.0;
+
+        let gimbal_effect = self.gimbal_angle * 0.1; // limit gimbal angle
+        let total_angle = self.angle + gimbal_effect;
+
+        let flame_vertices = [
+            vec2(-flame_half_width, half_height),
+            vec2(flame_half_width, half_height),
+            vec2(0.0, half_height + flame_length),
+        ];
+
+        let inner_flame_vertices = [
+            vec2(-flame_half_width * 0.6, half_height),
+            vec2(flame_half_width * 0.6, half_height),
+            vec2(0.0, half_height + flame_length * 0.8),
+        ];
+
+        let core_flame_vertices = [
+            vec2(-flame_half_width * 0.3, half_height),
+            vec2(flame_half_width * 0.3, half_height),
+            vec2(0.0, half_height + flame_length * 0.6),
+        ];
+
+        self.draw_rotated_flame(&flame_vertices, center, total_angle, RED);
+        self.draw_rotated_flame(&inner_flame_vertices, center, total_angle, ORANGE);
+        self.draw_rotated_flame(&core_flame_vertices, center, total_angle, YELLOW);
+    }
+
+    fn draw_rotated_flame(&self, vertices: &[Vec2], center: Vec2, angle: f32, color: Color) {
+        let cos_a = angle.cos();
+        let sin_a = angle.sin();
+
         let transformed_vertices: Vec<Vec2> = vertices
             .iter()
             .map(|v| {
@@ -91,17 +304,38 @@ impl RocketSprite {
             })
             .collect();
 
-        // Draw polygon outline
+        if transformed_vertices.len() == 3 {
+            draw_triangle(
+                transformed_vertices[0],
+                transformed_vertices[1],
+                transformed_vertices[2],
+                color,
+            );
+        }
+    }
+
+    fn draw_rotated_polygon(&self, vertices: &[Vec2], center: Vec2, color: Color) {
+        let cos_a = self.angle.cos();
+        let sin_a = self.angle.sin();
+
+        let transformed_vertices: Vec<Vec2> = vertices
+            .iter()
+            .map(|v| {
+                vec2(
+                    v.x * cos_a - v.y * sin_a + center.x,
+                    v.x * sin_a + v.y * cos_a + center.y,
+                )
+            })
+            .collect();
+
         for i in 0..transformed_vertices.len() {
             let current = transformed_vertices[i];
             let next = transformed_vertices[(i + 1) % transformed_vertices.len()];
             draw_line(current.x, current.y, next.x, next.y, 2.0, color);
         }
 
-        // Fill polygon using triangle fan from first vertex
         if transformed_vertices.len() >= 3 {
             let first_vertex = transformed_vertices[0];
-
             for i in 1..transformed_vertices.len() - 1 {
                 draw_triangle(
                     first_vertex,
