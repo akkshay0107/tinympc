@@ -129,21 +129,5 @@ impl Game {
         }
 
         self.draw_ground();
-
-        // Draw bounding box
-        let ground_y = screen_height() * 0.8;
-        let box_width = 40.0;
-        let box_height = 50.0;
-        let box_x = screen_width() / 2.0 - box_width / 2.0;
-        let box_color = Color::new(1.0, 0.0, 0.0, 0.7);
-
-        draw_rectangle_lines(
-            box_x,
-            ground_y - box_height,
-            box_width,
-            box_height,
-            2.0,
-            box_color,
-        );
     }
 }
