@@ -1,7 +1,9 @@
+use base::constants::{MAX_ANGLE_DEFLECTION, MAX_POS_X};
 use base::game::{DRAG_POINTER_COLOR, DRAG_POINTER_RADIUS, Game};
 use base::policy_net::PolicyNet;
 use base::world::{World, pixel_to_world, world_to_pixel};
 use macroquad::prelude::*;
+use rapier2d::na::Isometry2;
 use rapier2d::prelude::*;
 
 #[macroquad::main("Controlled Sim")]
@@ -11,6 +13,16 @@ async fn main() {
 
     let model_path = "./python/models/policy_net.onnx";
     let mut policy_net = PolicyNet::new(model_path).expect("Failed to create policy network");
+
+    rand::srand(macroquad::miniquad::date::now() as u64); // get different starts on each run
+    let start_x: f32 = rand::gen_range(10.0, MAX_POS_X - 10.0);
+    let start_angle: f32 = rand::gen_range(-MAX_ANGLE_DEFLECTION, MAX_ANGLE_DEFLECTION);
+
+    let rocket = world
+        .rigid_body_set
+        .get_mut(world.rocket_body_handle)
+        .unwrap();
+    rocket.set_position(Isometry2::new(vector![start_x, 40.0], start_angle), true);
 
     let obs_dim = 6;
     let input_shape = vec![1, obs_dim];
