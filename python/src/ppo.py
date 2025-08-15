@@ -11,15 +11,15 @@ def _init_layer(linear: nn.Linear, gain: float):
     nn.init.constant_(linear.bias, 0.0)
 
 class PolicyNet(nn.Module):
-    def __init__(self, obs_dim, act_dim):
+    def __init__(self, obs_dim, act_dim, hidden_dim=128):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(obs_dim, 64),
+            nn.Linear(obs_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(64, 64),
+            nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
         )
-        self.mean_layer = nn.Linear(64, act_dim)
+        self.mean_layer = nn.Linear(hidden_dim, act_dim)
         self.log_std = nn.Parameter(torch.zeros(act_dim))  # std is learnable
 
         gain = nn.init.calculate_gain('relu')
@@ -39,14 +39,14 @@ class PolicyNet(nn.Module):
         return Normal(mean, std)
 
 class ValueNet(nn.Module):
-    def __init__(self, obs_dim):
+    def __init__(self, obs_dim, hidden_dim=128):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(obs_dim, 64),
+            nn.Linear(obs_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(64, 64),
+            nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(64, 1),
+            nn.Linear(hidden_dim, 1),
         )
 
         gain = nn.init.calculate_gain('relu')
@@ -99,13 +99,14 @@ class PPOAgent:
             advantages[t] = gae
         return advantages
 
+    @torch.no_grad()
     def select_action(self, obs):
         obs_t = torch.FloatTensor(obs).unsqueeze(0)
         dist = self.policy.get_dist(obs_t)
         raw_action = dist.rsample()
         action = torch.tanh(raw_action)
         log_prob = self._tanh_log_prob(dist, raw_action, torch.tanh(raw_action))
-        return action.detach().numpy()[0], log_prob.detach()
+        return action.detach().numpy().flatten(), log_prob.detach()
 
     def evaluate_action(self, obs, action):
         raw_action = self._unsquash_action(action)
@@ -116,7 +117,8 @@ class PPOAgent:
         value = self.value(obs)
         return log_prob, entropy, value
 
-    def collect_trajectories(self, horizon=2048):
+    @torch.no_grad()
+    def collect_trajectories(self, horizon=4096):
         obs = self.env.reset()
         observations, actions, rewards, dones, log_probs, values = [], [], [], [], [], []
 
@@ -132,7 +134,7 @@ class PPOAgent:
             next_obs, reward, done, _ = self.env.step(action.detach().numpy().flatten())
 
             observations.append(obs)
-            actions.append(action.detach().numpy()[0])
+            actions.append(action.detach().numpy().flatten())
             rewards.append(reward)
             dones.append(done)
             log_probs.append(log_prob.item())
@@ -158,43 +160,38 @@ class PPOAgent:
             obs_batch, act_batch, rew_batch, done_batch, logp_batch, val_batch, last_val = self.collect_trajectories(horizon=4096)
             timestep += len(rew_batch)
 
-            # Saving the model with the best score for a batch
             episode_rewards = []
-            ep_reward = 0
+            ep_reward = 0.0
             for r, d in zip(rew_batch, done_batch):
                 ep_reward += r
                 if d:
                     episode_rewards.append(ep_reward)
-                    ep_reward = 0
-
+                    ep_reward = 0.0
             score = self._score(episode_rewards)
-
             if score > best_score:
                 best_score = score
                 torch.save(self.policy.state_dict(), "./models/policy_net.pth")
                 torch.save(self.value.state_dict(), "./models/value_net.pth")
                 print(f"New best score {score:.2f} - Checkpoint saved")
 
-            # rew_batch = np.array(rew_batch, dtype=np.float32)
-            # rew_mean = rew_batch.mean()
-            # rew_std = rew_batch.std() + 1e-6
-            # rew_batch = ((rew_batch - rew_mean) / rew_std).tolist()
+            rew_batch = np.array(rew_batch, dtype=np.float32)
+            rew_mean = rew_batch.mean()
+            rew_std = rew_batch.std() + 1e-6
+            rew_batch = ((rew_batch - rew_mean) / rew_std).tolist()
 
             advantages = self._compute_gae(rew_batch, val_batch + [last_val], done_batch)
-            returns = [adv + val for adv, val in zip(advantages, val_batch)]
+            ret_tensor = advantages + torch.tensor(val_batch)
 
             obs_tensor = torch.as_tensor(np.array(obs_batch), dtype=torch.float32)
             act_tensor = torch.as_tensor(np.array(act_batch), dtype=torch.float32)
-            ret_tensor = torch.as_tensor(np.array(returns), dtype=torch.float32)
-            adv_tensor = torch.as_tensor(np.array(advantages), dtype=torch.float32)
             old_logp_tensor = torch.as_tensor(np.array(logp_batch), dtype=torch.float32)
 
 
             # Normalize advantages
-            adv_tensor = (adv_tensor - adv_tensor.mean()) / (adv_tensor.std() + 1e-6) # eps for DBZ
+            adv_tensor = (advantages - advantages.mean()) / (advantages.std() + 1e-6) # eps for DBZ
 
             # PPO update
-            policy_loss = value_loss = None
+            policy_loss = value_loss = torch.Tensor() # Preventing pyright unbound variable warnings
             num_samples = len(obs_batch)
             for _ in range(self.epochs):
                 indices = np.arange(num_samples)
@@ -212,21 +209,19 @@ class PPOAgent:
 
                     # PPO clipped objective
                     clip_adv = torch.clamp(ratio, 1 - self.clip_eps, 1 + self.clip_eps) * adv_b
-                    policy_loss = -torch.min(ratio * adv_b, clip_adv).mean()
-                    value_loss = nn.MSELoss()(value, ret_b)
-                    entropy_bonus = entropy.mean()
 
-                    total_loss = policy_loss + 0.5 * value_loss - 0.01 * entropy_bonus
-
+                    policy_loss = -torch.min(ratio * adv_b, clip_adv).mean() - 0.01 * entropy.mean()
                     self.policy_optim.zero_grad()
-                    self.value_optim.zero_grad()
-                    total_loss.backward()
+                    policy_loss.backward()
+                    torch.nn.utils.clip_grad_norm_(self.policy.parameters(), max_norm=0.5)
                     self.policy_optim.step()
+
+                    value_loss = nn.MSELoss()(value, ret_b)
+                    self.value_optim.zero_grad()
+                    value_loss.backward()
+                    torch.nn.utils.clip_grad_norm_(self.value.parameters(), max_norm=0.5)
                     self.value_optim.step()
 
-            # Prevent pyright unbound variable warnings
-            assert(policy_loss is not None)
-            assert(value_loss is not None)
             print(f'Timesteps: {timestep}, Policy Loss: {policy_loss.item():.3f}, Value Loss: {value_loss.item():.3f}')
 
 def main():
