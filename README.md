@@ -1,6 +1,15 @@
 # tinympc
 
+![Demo](assets/demo_landing.gif)
+
 A Proximal Policy Optimization (PPO) agent trained to emulate an MPC in landing scenarios. The rocket landing simulation is built in Rust using `rapier2d` and `macroquad`, with FFI bindings to python for training the RL model.
+
+## Features
+- 2D rocket landing simulation with physics using `rapier2d` via Rust.
+- FFI Python bindings from the Rust simulation using `pyo3` to create a gym module for training.
+- PPO reinforcement learning agent trained using Python and PyTorch.
+- Interactive simulation with random start positions and mouse click-and-drag to reposition the rocket.
+- Model inference in Rust (for the controlled simulation) using the ONNX runtime.
 
 ## PPO Model
 
