@@ -49,6 +49,11 @@ async fn main() {
 
         let obs = vec![rocket_x, rocket_y, rocket_angle, vel_x, vel_y, ang_vel];
 
+        #[cfg(feature = "logging")]
+        {
+            println!("Observation state: {:?}", obs.clone());
+        }
+
         let (thrust, gimbal_angle) = if world.is_dragging {
             (0.0, 0.0)
         } else {
@@ -63,32 +68,6 @@ async fn main() {
 
         let (rocket_x, rocket_y, rocket_angle) = world.get_rocket_state();
         let (px_rocket_x, px_rocket_y) = world_to_pixel(rocket_x, rocket_y);
-
-        #[cfg(feature = "logging")]
-        {
-            let (vel_x, vel_y, ang_vel) = world.get_rocket_dynamics();
-
-            println!("Rocket State:");
-            println!(
-                "  Position - World: ({:.2}, {:.2}), Screen: ({:.2}, {:.2})",
-                rocket_x, rocket_y, px_rocket_x, px_rocket_y
-            );
-            println!(
-                "  Velocity: ({:.2}, {:.2}), Speed: {:.2}",
-                vel_x,
-                vel_y,
-                (vel_x.powi(2) + vel_y.powi(2)).sqrt()
-            );
-            println!(
-                "  Angle: {:.2}, Angular Velocity: {:.2}",
-                rocket_angle, ang_vel
-            );
-            println!("  Observation: {:?}", obs);
-            println!(
-                "  Action: Thrust: {:.2}, Gimbal: {:.2}",
-                thrust, gimbal_angle
-            );
-        }
 
         game.rocket.set_state(
             px_rocket_x,

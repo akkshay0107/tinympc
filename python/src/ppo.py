@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from torch.optim import AdamW
+from torch.optim import Adam
 from torch.distributions import Normal
 import numpy as np
 
@@ -68,8 +68,8 @@ class PPOAgent:
 
         self.policy = PolicyNet(self.env.obs_dim, self.env.act_dim)
         self.value = ValueNet(self.env.obs_dim)
-        self.policy_optim = AdamW(self.policy.parameters(), lr=lr)
-        self.value_optim = AdamW(self.value.parameters(), lr=2*lr)
+        self.policy_optim = Adam(self.policy.parameters(), lr=lr)
+        self.value_optim = Adam(self.value.parameters(), lr=2*lr)
 
     @staticmethod
     def _score(rewards, var_coef=0.05):
@@ -227,14 +227,14 @@ class PPOAgent:
 def main():
     # constants
     MAX_STEPS = 3000
-    TOTAL_TIMESTEPS = 500_000
+    TOTAL_TIMESTEPS = 1_000_000
 
     env = PyEnvironment(MAX_STEPS)
     agent = PPOAgent(
         env,
         gamma=0.99,
         lam=0.95,
-        clip_eps=0.2,
+        clip_eps=0.1,
         lr=5e-5,
         epochs=10,
         batch_size=64
