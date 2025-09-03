@@ -1,6 +1,6 @@
 # tinympc
 
-![Demo](assets/demo_landing.gif)
+![Demo](assets/demo_landing_new.gif)
 
 A Proximal Policy Optimization (PPO) agent trained to emulate an MPC in landing scenarios. The rocket landing simulation is built in Rust using `rapier2d` and `macroquad`, with FFI bindings to python for training the RL model.
 
