@@ -1,17 +1,18 @@
+import numpy as np
 import torch
 import torch.nn as nn
-from torch.optim import Adam
-from torch.distributions import Normal
-import numpy as np
-
 from gym import PyEnvironment
+from torch.distributions import Normal
+from torch.optim import Adam
+
 
 def _init_layer(linear: nn.Linear, gain: float):
-    nn.init.orthogonal_(linear.weight, gain) # type: ignore
+    nn.init.orthogonal_(linear.weight, gain)  # type: ignore
     nn.init.constant_(linear.bias, 0.0)
 
+
 class PolicyNet(nn.Module):
-    def __init__(self, obs_dim, act_dim, hidden_dim=128):
+    def __init__(self, obs_dim, act_dim, hidden_dim=256):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(obs_dim, hidden_dim),
@@ -22,7 +23,7 @@ class PolicyNet(nn.Module):
         self.mean_layer = nn.Linear(hidden_dim, act_dim)
         self.log_std = nn.Parameter(torch.zeros(act_dim))  # std is learnable
 
-        gain = nn.init.calculate_gain('relu')
+        gain = nn.init.calculate_gain("relu")
         for layer in self.net:
             if isinstance(layer, nn.Linear):
                 _init_layer(layer, gain)
@@ -38,8 +39,9 @@ class PolicyNet(nn.Module):
         mean, std = self.forward(obs)
         return Normal(mean, std)
 
+
 class ValueNet(nn.Module):
-    def __init__(self, obs_dim, hidden_dim=128):
+    def __init__(self, obs_dim, hidden_dim=256):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(obs_dim, hidden_dim),
@@ -49,7 +51,7 @@ class ValueNet(nn.Module):
             nn.Linear(hidden_dim, 1),
         )
 
-        gain = nn.init.calculate_gain('relu')
+        gain = nn.init.calculate_gain("relu")
         for layer in self.net:
             if isinstance(layer, nn.Linear):
                 _init_layer(layer, gain)
@@ -57,8 +59,11 @@ class ValueNet(nn.Module):
     def forward(self, obs):
         return self.net(obs).squeeze(-1)
 
+
 class PPOAgent:
-    def __init__(self, env, gamma=0.99, lam=0.95, clip_eps=0.2, lr=5e-5, epochs=10, batch_size=64):
+    def __init__(
+        self, env, gamma=0.99, lam=0.95, clip_eps=0.2, lr=5e-5, epochs=10, batch_size=64
+    ):
         self.env = env
         self.gamma = gamma
         self.lam = lam
@@ -69,7 +74,7 @@ class PPOAgent:
         self.policy = PolicyNet(self.env.obs_dim, self.env.act_dim)
         self.value = ValueNet(self.env.obs_dim)
         self.policy_optim = Adam(self.policy.parameters(), lr=lr)
-        self.value_optim = Adam(self.value.parameters(), lr=2*lr)
+        self.value_optim = Adam(self.value.parameters(), lr=lr)
 
     @staticmethod
     def _score(rewards, var_coef=0.05):
@@ -120,7 +125,14 @@ class PPOAgent:
     @torch.no_grad()
     def collect_trajectories(self, horizon=4096):
         obs = self.env.reset()
-        observations, actions, rewards, dones, log_probs, values = [], [], [], [], [], []
+        observations, actions, rewards, dones, log_probs, values = (
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+        )
 
         for _ in range(horizon):
             obs_t = torch.FloatTensor(obs).unsqueeze(0)
@@ -157,8 +169,16 @@ class PPOAgent:
         timestep = 0
         best_score = float("-inf")
         while timestep < total_timesteps:
-            obs_batch, act_batch, rew_batch, done_batch, logp_batch, val_batch, last_val = self.collect_trajectories(horizon=4096)
-            timestep += len(rew_batch)
+            (
+                obs_batch,
+                act_batch,
+                rew_batch,
+                done_batch,
+                logp_batch,
+                val_batch,
+                last_val,
+            ) = self.collect_trajectories(horizon=8192)
+            timestep += len(obs_batch)
 
             episode_rewards = []
             ep_reward = 0.0
@@ -175,29 +195,30 @@ class PPOAgent:
                 print(f"New best score {score:.2f} - Checkpoint saved")
 
             rew_batch = np.array(rew_batch, dtype=np.float32)
-            rew_mean = rew_batch.mean()
-            rew_std = rew_batch.std() + 1e-6
-            rew_batch = ((rew_batch - rew_mean) / rew_std).tolist()
 
-            advantages = self._compute_gae(rew_batch, val_batch + [last_val], done_batch)
+            advantages = self._compute_gae(
+                rew_batch, val_batch + [last_val], done_batch
+            )
             ret_tensor = advantages + torch.tensor(val_batch)
 
             obs_tensor = torch.as_tensor(np.array(obs_batch), dtype=torch.float32)
             act_tensor = torch.as_tensor(np.array(act_batch), dtype=torch.float32)
             old_logp_tensor = torch.as_tensor(np.array(logp_batch), dtype=torch.float32)
 
-
             # Normalize advantages
-            adv_tensor = (advantages - advantages.mean()) / (advantages.std() + 1e-6) # eps for DBZ
+            adv_tensor = (advantages - advantages.mean()) / (
+                advantages.std() + 1e-8
+            )  # eps for DBZ
 
             # PPO update
-            policy_loss = value_loss = torch.Tensor() # Preventing pyright unbound variable warnings
             num_samples = len(obs_batch)
+            avg_policy_loss, avg_value_loss = 0.0, 0.0
+            processed_batches = 0
             for _ in range(self.epochs):
                 indices = np.arange(num_samples)
                 np.random.shuffle(indices)
                 for idx in range(0, num_samples, self.batch_size):
-                    batch_indices = indices[idx:idx + self.batch_size]
+                    batch_indices = indices[idx : idx + self.batch_size]
                     obs_b = obs_tensor[batch_indices]
                     act_b = act_tensor[batch_indices]
                     ret_b = ret_tensor[batch_indices]
@@ -208,41 +229,54 @@ class PPOAgent:
                     ratio = torch.exp(new_logp - old_logp_b)
 
                     # PPO clipped objective
-                    clip_adv = torch.clamp(ratio, 1 - self.clip_eps, 1 + self.clip_eps) * adv_b
+                    clip_adv = (
+                        torch.clamp(ratio, 1 - self.clip_eps, 1 + self.clip_eps) * adv_b
+                    )
 
-                    policy_loss = -torch.min(ratio * adv_b, clip_adv).mean() - 0.01 * entropy.mean()
+                    policy_loss = (
+                        -torch.min(ratio * adv_b, clip_adv).mean()
+                        - 0.01 * entropy.mean()
+                    )
                     self.policy_optim.zero_grad()
                     policy_loss.backward()
-                    torch.nn.utils.clip_grad_norm_(self.policy.parameters(), max_norm=0.5)
+                    torch.nn.utils.clip_grad_norm_(
+                        self.policy.parameters(), max_norm=0.2
+                    )
                     self.policy_optim.step()
+                    avg_policy_loss += policy_loss.item()
 
                     value_loss = nn.MSELoss()(value, ret_b)
                     self.value_optim.zero_grad()
                     value_loss.backward()
-                    torch.nn.utils.clip_grad_norm_(self.value.parameters(), max_norm=0.5)
+                    torch.nn.utils.clip_grad_norm_(
+                        self.value.parameters(), max_norm=0.2
+                    )
                     self.value_optim.step()
+                    avg_value_loss += value_loss.item()
 
-            print(f'Timesteps: {timestep}, Policy Loss: {policy_loss.item():.3f}, Value Loss: {value_loss.item():.3f}')
+                    processed_batches += 1
+
+            avg_policy_loss /= processed_batches
+            avg_value_loss /= processed_batches
+            print(
+                f"Timesteps: {timestep}, Policy Loss: {avg_policy_loss:.3f}, Value Loss: {avg_value_loss:.3f}"
+            )
+
 
 def main():
     # constants
     MAX_STEPS = 3000
-    TOTAL_TIMESTEPS = 1_000_000
+    TOTAL_TIMESTEPS = 100_000
 
     env = PyEnvironment(MAX_STEPS)
     agent = PPOAgent(
-        env,
-        gamma=0.99,
-        lam=0.95,
-        clip_eps=0.1,
-        lr=5e-5,
-        epochs=10,
-        batch_size=64
+        env, gamma=0.99, lam=0.95, clip_eps=0.2, lr=3e-4, epochs=4, batch_size=256
     )
 
     print("Training started.")
     agent.train(TOTAL_TIMESTEPS)
     print("Training completed.")
+
 
 if __name__ == "__main__":
     main()
