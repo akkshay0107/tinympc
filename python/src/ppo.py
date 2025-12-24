@@ -32,7 +32,7 @@ class PolicyNet(nn.Module):
     def forward(self, obs):
         x = self.net(obs)
         mean = self.mean_layer(x)
-        std = torch.exp(self.log_std)
+        std = torch.clamp(torch.exp(self.log_std), min=None, max=1)
         return mean, std
 
     def get_dist(self, obs):
@@ -77,11 +77,16 @@ class PPOAgent:
         self.value_optim = Adam(self.value.parameters(), lr=lr)
 
     @staticmethod
-    def _score(rewards, var_coef=0.05):
+    def _score(rewards, dones):
         if not rewards:
             return float("-inf")
 
-        return np.mean(rewards) - var_coef * np.var(rewards)
+        num_ep = sum(dones)
+        tot_rew = sum(rewards)
+
+        if num_ep == 0:
+            return float("-inf")
+        return tot_rew / num_ep
 
     @staticmethod
     def _unsquash_action(bounded_action):
@@ -110,8 +115,9 @@ class PPOAgent:
         dist = self.policy.get_dist(obs_t)
         raw_action = dist.rsample()
         action = torch.tanh(raw_action)
+        action_np = action.detach().flatten().numpy()
         log_prob = self._tanh_log_prob(dist, raw_action, torch.tanh(raw_action))
-        return action.detach().numpy().flatten(), log_prob.detach()
+        return action_np, log_prob
 
     def evaluate_action(self, obs, action):
         raw_action = self._unsquash_action(action)
@@ -141,9 +147,10 @@ class PPOAgent:
 
             raw_action = dist.rsample()
             action = torch.tanh(raw_action)
+            action_np = action.detach().flatten().numpy()
             log_prob = self._tanh_log_prob(dist, raw_action, torch.tanh(raw_action))
 
-            next_obs, reward, done, _ = self.env.step(action.detach().numpy().flatten())
+            next_obs, reward, done, _ = self.env.step(action_np)
 
             observations.append(obs)
             actions.append(action.detach().numpy().flatten())
@@ -180,30 +187,21 @@ class PPOAgent:
             ) = self.collect_trajectories(horizon=8192)
             timestep += len(obs_batch)
 
-            episode_rewards = []
-            ep_reward = 0.0
-            for r, d in zip(rew_batch, done_batch):
-                ep_reward += r
-                if d:
-                    episode_rewards.append(ep_reward)
-                    ep_reward = 0.0
-            score = self._score(episode_rewards)
+            score = self._score(rew_batch, done_batch)
             if score > best_score:
                 best_score = score
                 torch.save(self.policy.state_dict(), "./models/policy_net.pth")
                 torch.save(self.value.state_dict(), "./models/value_net.pth")
                 print(f"New best score {score:.2f} - Checkpoint saved")
 
-            rew_batch = np.array(rew_batch, dtype=np.float32)
-
             advantages = self._compute_gae(
                 rew_batch, val_batch + [last_val], done_batch
             )
             ret_tensor = advantages + torch.tensor(val_batch)
 
-            obs_tensor = torch.as_tensor(np.array(obs_batch), dtype=torch.float32)
-            act_tensor = torch.as_tensor(np.array(act_batch), dtype=torch.float32)
-            old_logp_tensor = torch.as_tensor(np.array(logp_batch), dtype=torch.float32)
+            obs_tensor = torch.tensor(np.array(obs_batch), dtype=torch.float32)
+            act_tensor = torch.tensor(np.array(act_batch), dtype=torch.float32)
+            old_logp_tensor = torch.tensor(np.array(logp_batch), dtype=torch.float32)
 
             # Normalize advantages
             adv_tensor = (advantages - advantages.mean()) / (
@@ -215,8 +213,7 @@ class PPOAgent:
             avg_policy_loss, avg_value_loss = 0.0, 0.0
             processed_batches = 0
             for _ in range(self.epochs):
-                indices = np.arange(num_samples)
-                np.random.shuffle(indices)
+                indices = torch.randperm(num_samples)
                 for idx in range(0, num_samples, self.batch_size):
                     batch_indices = indices[idx : idx + self.batch_size]
                     obs_b = obs_tensor[batch_indices]
@@ -266,7 +263,7 @@ class PPOAgent:
 def main():
     # constants
     MAX_STEPS = 3000
-    TOTAL_TIMESTEPS = 100_000
+    TOTAL_TIMESTEPS = 250_000
 
     env = PyEnvironment(MAX_STEPS)
     agent = PPOAgent(
