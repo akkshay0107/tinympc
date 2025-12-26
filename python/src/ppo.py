@@ -32,7 +32,7 @@ class PolicyNet(nn.Module):
     def forward(self, obs):
         x = self.net(obs)
         mean = self.mean_layer(x)
-        std = torch.exp(self.log_std)
+        std = self.log_std.clamp(-20, 2).exp()
         return mean, std
 
     def get_dist(self, obs):
@@ -67,7 +67,7 @@ class PPOAgent:
         gamma=0.995,
         lam=0.95,
         clip_eps=0.2,
-        lr=3e-4,
+        lr=1e-4,
         epochs=4,
         batch_size=256,
         ent_coef=0.01,
@@ -102,7 +102,7 @@ class PPOAgent:
         log_prob = dist.log_prob(raw_action) - torch.log(1 - tanh_action.pow(2) + 1e-6)
         return log_prob.sum(dim=-1)
 
-    def _compute_gae(self, rewards, values, next_values, bootstrap_mask):
+    def _compute_gae(self, rewards, values, next_values, bootstrap_mask, dones):
         T = rewards.shape[0]
         adv = torch.zeros((T,), device=rewards.device, dtype=rewards.dtype)
         gae = torch.zeros((), device=rewards.device, dtype=rewards.dtype)
@@ -110,7 +110,7 @@ class PPOAgent:
             delta = (
                 rewards[t] + self.gamma * next_values[t] * bootstrap_mask[t] - values[t]
             )
-            gae = delta + self.gamma * self.lam * bootstrap_mask[t] * gae
+            gae = delta + self.gamma * self.lam * (1 - dones[t]) * gae
             adv[t] = gae
         return adv
 
@@ -192,10 +192,15 @@ class PPOAgent:
                 val_next_b, dtype=torch.float32, device=self.device
             )
 
-            terminated_t = torch.as_tensor(done_b & (~trunc_b), device=self.device)
-            bootstrap_mask = 1.0 - terminated_t.float()
+            terminated_t = torch.as_tensor(
+                done_b & (~trunc_b), dtype=torch.float32, device=self.device
+            )
+            done_t = torch.as_tensor(done_b, dtype=torch.float32, device=self.device)
+            bootstrap_mask = 1.0 - terminated_t
 
-            adv_t = self._compute_gae(rew_t, val_old_t, val_next_t, bootstrap_mask)
+            adv_t = self._compute_gae(
+                rew_t, val_old_t, val_next_t, bootstrap_mask, done_t
+            )
             ret_t = adv_t + val_old_t
 
             adv_t = (adv_t - adv_t.mean()) / (adv_t.std(unbiased=False) + 1e-8)
@@ -217,7 +222,9 @@ class PPOAgent:
                     dist = self.policy.get_dist(obs_mb)
                     tanh_action = torch.tanh(raw_action)
                     logp = self._tanh_log_prob(dist, raw_action, tanh_action)
-                    entropy_est = -logp  # Monte Carlo estimate
+                    entropy_proxy = dist.entropy().sum(
+                        dim=-1
+                    )  # entropy from the original normal dist
 
                     ratio = torch.exp(logp - logp_old_mb)
                     surr1 = ratio * adv_mb
@@ -227,11 +234,12 @@ class PPOAgent:
                     )
                     pi_loss = (
                         -(torch.min(surr1, surr2)).mean()
-                        - self.ent_coef * entropy_est.mean()
+                        - self.ent_coef * entropy_proxy.mean()
                     )
 
                     self.policy_optim.zero_grad(set_to_none=True)
                     pi_loss.backward()
+                    nn.utils.clip_grad_norm_(self.policy.parameters(), 0.5)
                     self.policy_optim.step()
 
                     value = self.value(obs_mb)
@@ -239,6 +247,7 @@ class PPOAgent:
 
                     self.value_optim.zero_grad(set_to_none=True)
                     value_loss.backward()
+                    nn.utils.clip_grad_norm_(self.value.parameters(), 0.5)
                     self.value_optim.step()
 
                     avg_pi_loss += pi_loss.item()
@@ -255,8 +264,10 @@ class PPOAgent:
                 torch.save(self.policy.state_dict(), "./models/policy_net.pth")
                 torch.save(self.value.state_dict(), "./models/value_net.pth")
 
+
 def main():
     import os
+
     os.makedirs("./models", exist_ok=True)
 
     # constants

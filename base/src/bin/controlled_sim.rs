@@ -1,4 +1,4 @@
-use base::constants::{MAX_ANGLE_DEFLECTION, MAX_POS_X};
+use base::constants::{_MIN_POS_Y, MAX_ANGLE_DEFLECTION, MAX_POS_X};
 use base::game::{DRAG_POINTER_COLOR, DRAG_POINTER_RADIUS, Game};
 use base::policy_net::PolicyNet;
 use base::world::{World, pixel_to_world, world_to_pixel};
@@ -54,7 +54,7 @@ async fn main() {
             println!("Observation state: {:?}", obs.clone());
         }
 
-        let (thrust, gimbal_angle) = if world.is_dragging {
+        let (thrust, gimbal_angle) = if world.is_dragging || rocket_y <= _MIN_POS_Y {
             (0.0, 0.0)
         } else {
             let action = policy_net
