@@ -114,52 +114,59 @@ impl PyEnvironment {
         let next_state = [x, y, theta, vx, vy, omega];
 
         let (reason, done) = self._episode_status(x, y, theta, vx, vy, omega);
-        let reward = self.calculate_reward(x, y, theta, vx, vy, omega);
+        let reward = self.calculate_reward(x, y, theta, vx, vy, omega, thrust, gimbal_angle);
 
         self.prev_y = y;
 
         Ok((next_state, reward, done, reason))
     }
 
-    fn calculate_reward(&self, x: f32, y: f32, theta: f32, vx: f32, vy: f32, omega: f32) -> f32 {
-        let dy = y - _MIN_POS_Y;
-        let dx = x - (MAX_POS_X / 2.0); // half max pos x is the middle
-        let dist_penalty = -3e-2 * (dy.powi(2) + dx.powi(2));
-        let vel_penalty = -1e-2 * (vx.powi(2) + vy.powi(2));
-        let angle_penalty = -5.0 * theta.powi(2);
-        let ang_vel_penalty = -5.0 * omega.powi(2);
+    fn calculate_reward(
+        &self,
+        x: f32,
+        y: f32,
+        theta: f32,
+        vx: f32,
+        vy: f32,
+        omega: f32,
+        thrust: f32,
+        gimbal: f32,
+    ) -> f32 {
+        let ndy = (y - _MIN_POS_Y) / (MAX_POS_Y - _MIN_POS_Y); // [0, 1]
+        let ndx = (2.0 * x - MAX_POS_X) / MAX_POS_X; // [-1, 1]
+        let dist_penalty = -0.5 * ndx.powi(2) - ndy.powi(2); // [0, 1.5]
 
-        let downward_progress_reward = if self.steps > 1 && self.prev_y > y {
-            0.5 * (self.prev_y - y)
-        } else {
-            0.0
-        };
+        let vel_penalty = -1e-3 * (vx.powi(2) + vy.powi(2)); // [0, 0.8] assuming both velocities under 20
+        let angle_penalty = -0.1 * theta.powi(2); // [0, 1]
+        let ang_vel_penalty = -0.1 * omega.powi(2); // [0, 1] for omega under pi
+
+        let action_penalty = -0.1 * thrust.powi(2) - 0.1 * gimbal.powi(2);
+
+        let time_penalty = -0.01;
 
         let upper_exit_penalty = if self.steps > 1 && y > MAX_POS_Y {
-            -1e4
+            -1e2
         } else {
             0.0
         };
 
-        let landing_bonus = if self._is_crash_landing(x, y, theta, vx, vy, omega) {
-            -1e4
-        } else if self._is_successful_landing(x, y, theta, vx, vy, omega) {
-            1e4
-        } else {
-            0.0
-        };
+        let landing_bonus =
+            if self._is_crash_landing(x, y, theta, vx, vy, omega) || self._is_oob(x, y) {
+                -1e2
+            } else if self._is_successful_landing(x, y, theta, vx, vy, omega) {
+                1e2
+            } else {
+                0.0
+            };
 
-        let time_penalty = -0.2;
-
-        (dist_penalty
+        dist_penalty
             + vel_penalty
             + angle_penalty
             + ang_vel_penalty
-            + downward_progress_reward
-            + landing_bonus
+            + action_penalty
+            + time_penalty
             + upper_exit_penalty
-            + time_penalty)
-            * 5e-3
+            + landing_bonus
     }
 
     fn _sample(&self) -> [f32; 6] {
@@ -183,16 +190,12 @@ impl PyEnvironment {
 
     fn _is_crash_landing(&self, x: f32, y: f32, theta: f32, vx: f32, vy: f32, omega: f32) -> bool {
         let landed = y <= _MIN_POS_Y;
-        let horizontal_out = x <= 0.0 || x >= MAX_POS_X;
-        let vertical_out = y >= MAX_POS_Y;
         let bad_angle = theta.abs() > MAX_LANDING_ANGLE;
         let fast_land = vy.abs() > MAX_LANDING_VY;
         let fast_horiz = vx.abs() > MAX_LANDING_VX;
         let fast_spin = omega.abs() > MAX_LANDING_ANGULAR_VELOCITY;
 
         (landed && (bad_angle || fast_land || fast_horiz || fast_spin))
-            || horizontal_out
-            || vertical_out
     }
 
     fn _is_successful_landing(
@@ -214,6 +217,10 @@ impl PyEnvironment {
         landed && in_x_range && gentle_angle && gentle_vy && gentle_vx && gentle_omega
     }
 
+    fn _is_oob(&self, x: f32, y: f32) -> bool {
+        x < 0.0 || x > MAX_POS_X || y > MAX_POS_Y
+    }
+
     fn _episode_status(
         &self,
         x: f32,
@@ -227,7 +234,7 @@ impl PyEnvironment {
             EpisodeStatus::Success
         } else if self._is_crash_landing(x, y, theta, vx, vy, omega) {
             EpisodeStatus::Crash
-        } else if x < 0.0 || x > MAX_POS_X || y > MAX_POS_Y {
+        } else if self._is_oob(x, y) {
             EpisodeStatus::OutOfBounds
         } else if self.steps >= self.max_steps {
             EpisodeStatus::Timeout
