@@ -174,9 +174,11 @@ impl PyEnvironment {
             terminal_reward = -base_success;
         } else if self._is_successful_landing(x, y, theta, vx, vy, omega) {
             let ndx = (2.0 * x - MAX_POS_X) / MAX_POS_X;
-            let precision_factor = 1.0 - ndx.powi(2); // punishes landing far away from center
-
-            terminal_reward = precision_factor * base_success;
+            if ndx.abs() > 0.1 {
+                terminal_reward = -base_success / 2.0;
+            } else {
+                terminal_reward = base_success;
+            }
         }
 
         let time_penalty = 0.1;

@@ -277,6 +277,13 @@ def main():
     env = PyEnvironment(MAX_STEPS)
     agent = PPOAgent(env)
 
+    # optionally load old dicts before training
+    # state_dict = torch.load("./models/policy_net.pth", map_location=agent.device)
+    # agent.policy.load_state_dict(state_dict)
+
+    # state_dict = torch.load("./models/value_net.pth", map_location=agent.device)
+    # agent.value.load_state_dict(state_dict)
+
     print("Training started.")
     agent.train(NUM_ROLLOUTS)
     print("Training completed.")
