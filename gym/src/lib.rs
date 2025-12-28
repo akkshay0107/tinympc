@@ -165,7 +165,7 @@ impl PyEnvironment {
         let shaping_reward = 0.99 * current_potential - self.prev_potential;
         self.prev_potential = current_potential;
 
-        let action_penalty = -0.1 * (thrust.powi(2) + gimbal.powi(2));
+        let action_penalty = -0.5 * (thrust.powi(2) + gimbal.powi(2));
 
         let mut terminal_reward = 0.0;
         let base_success = 200.0;
@@ -181,7 +181,7 @@ impl PyEnvironment {
             }
         }
 
-        let time_penalty = 0.1;
+        let time_penalty = 0.25;
         shaping_reward + action_penalty + terminal_reward - time_penalty
     }
 

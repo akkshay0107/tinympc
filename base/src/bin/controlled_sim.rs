@@ -10,9 +10,19 @@ use rapier2d::prelude::*;
 async fn main() {
     let mut world = World::new();
     let mut game = Game::new();
+    let mut policy_net: PolicyNet;
 
-    let model_path = "./python/models/policy_net.onnx";
-    let mut policy_net = PolicyNet::new(model_path).expect("Failed to create policy network");
+    #[cfg(target_arch = "wasm32")]
+    {
+        ort::set_api(ort_tract::api());
+        policy_net = PolicyNet::new(include_bytes!("./python/models/policy_net.onnx")).unwrap();
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let model_bytes = std::fs::read("./python/models/policy_net.onnx").unwrap();
+        policy_net = PolicyNet::new(&model_bytes).unwrap();
+    }
 
     rand::srand(macroquad::miniquad::date::now() as u64); // get different starts on each run
     let start_x: f32 = rand::gen_range(10.0, MAX_POS_X - 10.0);

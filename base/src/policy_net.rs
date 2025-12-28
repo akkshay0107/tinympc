@@ -10,10 +10,10 @@ pub struct PolicyNet {
 }
 
 impl PolicyNet {
-    pub fn new(model_path: &str) -> Result<Self, Box<dyn Error>> {
+    pub fn new(bytes: &[u8]) -> Result<Self, Box<dyn Error>> {
         let session = Session::builder()?
             .with_optimization_level(GraphOptimizationLevel::Level3)?
-            .commit_from_file(model_path)?;
+            .commit_from_memory(bytes)?;
         Ok(Self { session })
     }
 
@@ -58,7 +58,8 @@ mod tests {
 
     #[test]
     fn test_policy_net_forward() {
-        let mut net = PolicyNet::new("../python/models/policy_net.onnx").unwrap();
+        let model_bytes = std::fs::read("../python/models/policy_net.onnx").unwrap();
+        let mut net = PolicyNet::new(&model_bytes).unwrap();
         let obs_dim = 6;
         let act_dim = 2;
         let input_shape = vec![1, obs_dim]; // batch size 1
@@ -72,7 +73,8 @@ mod tests {
 
     #[test]
     fn test_policy_net_get_action() {
-        let mut net = PolicyNet::new("../python/models/policy_net.onnx").unwrap();
+        let model_bytes = std::fs::read("../python/models/policy_net.onnx").unwrap();
+        let mut net = PolicyNet::new(&model_bytes).unwrap();
         let obs_dim = 6;
         let act_dim = 2;
         let input_shape = vec![1, obs_dim]; // batch size 1

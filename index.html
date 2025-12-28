@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <title>Macroquad Rocket Sim</title>
+        <style>
+            body {
+                margin: 0;
+                padding: 0;
+            }
+            canvas {
+                width: 100%;
+                height: 100%;
+                position: absolute;
+                background-color: black;
+            }
+        </style>
+    </head>
+    <body>
+        <canvas id="glcanvas" tabindex="1"></canvas>
+
+        <!-- Macroquad glue code -->
+        <script src="mq_js_bundle.js"></script>
+
+        <script>
+            load("./target/release/controlled_sim.wasm");
+        </script>
+    </body>
+</html>
