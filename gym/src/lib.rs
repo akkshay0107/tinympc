@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+
 use base::constants::*;
 use base::world::World;
 use pyo3::prelude::*;
@@ -31,7 +33,7 @@ impl EpisodeStatus {
 #[pyclass]
 pub struct PyEnvironment {
     world: World,
-    prev_y: f32,
+    prev_potential: f32,
     steps: u32,
     max_steps: u32,
     obs_dim: u32,
@@ -45,7 +47,7 @@ impl PyEnvironment {
         let world = World::new();
         Self {
             world,
-            prev_y: MAX_POS_Y,
+            prev_potential: 0.0,
             steps: 0,
             max_steps,
             obs_dim: 6,
@@ -65,8 +67,8 @@ impl PyEnvironment {
     }
 
     #[getter]
-    pub fn get_prev_y(&self) -> PyResult<f32> {
-        Ok(self.prev_y)
+    pub fn get_prev_potential(&self) -> PyResult<f32> {
+        Ok(self.prev_potential)
     }
 
     #[getter]
@@ -84,7 +86,14 @@ impl PyEnvironment {
         self.steps = 0;
 
         let init_state = self._sample(); // Random valid state
-        self.prev_y = init_state[1];
+        self.prev_potential = self.calculate_potential(
+            init_state[0],
+            init_state[1],
+            init_state[2],
+            init_state[3],
+            init_state[4],
+            init_state[5],
+        );
 
         // Set the state to the rocket in the world
         let rocket = self
@@ -116,13 +125,31 @@ impl PyEnvironment {
         let (reason, done) = self._episode_status(x, y, theta, vx, vy, omega);
         let reward = self.calculate_reward(x, y, theta, vx, vy, omega, thrust, gimbal_angle);
 
-        self.prev_y = y;
-
         Ok((next_state, reward, done, reason))
     }
 
+    fn calculate_potential(&self, x: f32, y: f32, theta: f32, vx: f32, vy: f32, omega: f32) -> f32 {
+        // center is (max_x/2, 0) => potential should be min there
+        let ndy = (y - _MIN_POS_Y) / (MAX_POS_Y - _MIN_POS_Y); // [0, 1]
+        let ndx = (2.0 * x - MAX_POS_X) / MAX_POS_X; // [-1, 1]
+        let sq_dist = ndx.powi(2) + ndy.powi(2); // [0, 2]
+        let dist_score = 1.0 - (sq_dist / 2.0);
+
+        // slow velocity preferred
+        let vel = vx.powi(2) + vy.powi(2);
+        let sq_max_vel = 400.0; // estimate
+        let vel_score = 1.0 - (vel / sq_max_vel).clamp(0.0, 1.0);
+
+        // reward being upright and not spinning too much
+        let ntheta = theta / PI;
+        let angle_norm = ntheta.powi(2) + omega.clamp(-1.0, 1.0).powi(2); // [0, 2]
+        let angle_score = 1.0 - (angle_norm / 2.0);
+
+        100.0 * (0.5 * dist_score + 0.15 * vel_score + 0.35 * angle_score) // scaling it to match magnitude of terminal reward
+    }
+
     fn calculate_reward(
-        &self,
+        &mut self,
         x: f32,
         y: f32,
         theta: f32,
@@ -132,41 +159,28 @@ impl PyEnvironment {
         thrust: f32,
         gimbal: f32,
     ) -> f32 {
-        let ndy = (y - _MIN_POS_Y) / (MAX_POS_Y - _MIN_POS_Y); // [0, 1]
-        let ndx = (2.0 * x - MAX_POS_X) / MAX_POS_X; // [-1, 1]
-        let dist_penalty = -0.5 * ndx.powi(2) - ndy.powi(2); // [0, 1.5]
+        let current_potential = self.calculate_potential(x, y, theta, vx, vy, omega);
+        // F = gamma * Phi(s') - Phi(s)
+        // gamma = 0.99 in this case
+        let shaping_reward = 0.99 * current_potential - self.prev_potential;
+        self.prev_potential = current_potential;
 
-        let vel_penalty = -1e-3 * (vx.powi(2) + vy.powi(2)); // [0, 0.8] assuming both velocities under 20
-        let angle_penalty = -0.1 * theta.powi(2); // [0, 1]
-        let ang_vel_penalty = -0.1 * omega.powi(2); // [0, 1] for omega under pi
+        let action_penalty = -0.1 * (thrust.powi(2) + gimbal.powi(2));
 
-        let action_penalty = -0.1 * thrust.powi(2) - 0.1 * gimbal.powi(2);
+        let mut terminal_reward = 0.0;
+        let base_success = 200.0;
 
-        let time_penalty = -0.01;
+        if self._is_crash_landing(x, y, theta, vx, vy, omega) || self._is_oob(x, y) {
+            terminal_reward = -base_success;
+        } else if self._is_successful_landing(x, y, theta, vx, vy, omega) {
+            let ndx = (2.0 * x - MAX_POS_X) / MAX_POS_X;
+            let precision_factor = 1.0 - ndx.powi(2); // punishes landing far away from center
 
-        let upper_exit_penalty = if self.steps > 1 && y > MAX_POS_Y {
-            -1e2
-        } else {
-            0.0
-        };
+            terminal_reward = precision_factor * base_success;
+        }
 
-        let landing_bonus =
-            if self._is_crash_landing(x, y, theta, vx, vy, omega) || self._is_oob(x, y) {
-                -1e2
-            } else if self._is_successful_landing(x, y, theta, vx, vy, omega) {
-                1e2
-            } else {
-                0.0
-            };
-
-        dist_penalty
-            + vel_penalty
-            + angle_penalty
-            + ang_vel_penalty
-            + action_penalty
-            + time_penalty
-            + upper_exit_penalty
-            + landing_bonus
+        let time_penalty = 0.1;
+        shaping_reward + action_penalty + terminal_reward - time_penalty
     }
 
     fn _sample(&self) -> [f32; 6] {
@@ -188,14 +202,14 @@ impl PyEnvironment {
         Ok(self._sample())
     }
 
-    fn _is_crash_landing(&self, x: f32, y: f32, theta: f32, vx: f32, vy: f32, omega: f32) -> bool {
+    fn _is_crash_landing(&self, _x: f32, y: f32, theta: f32, vx: f32, vy: f32, omega: f32) -> bool {
         let landed = y <= _MIN_POS_Y;
         let bad_angle = theta.abs() > MAX_LANDING_ANGLE;
         let fast_land = vy.abs() > MAX_LANDING_VY;
         let fast_horiz = vx.abs() > MAX_LANDING_VX;
         let fast_spin = omega.abs() > MAX_LANDING_ANGULAR_VELOCITY;
 
-        (landed && (bad_angle || fast_land || fast_horiz || fast_spin))
+        landed && (bad_angle || fast_land || fast_horiz || fast_spin)
     }
 
     fn _is_successful_landing(

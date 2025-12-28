@@ -272,7 +272,7 @@ def main():
 
     # constants
     MAX_STEPS = 3000
-    NUM_ROLLOUTS = 10_000
+    NUM_ROLLOUTS = 1000
 
     env = PyEnvironment(MAX_STEPS)
     agent = PPOAgent(env)
