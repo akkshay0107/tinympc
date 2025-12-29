@@ -28,7 +28,7 @@ class PolicyNet(nn.Module):
             if isinstance(layer, nn.Linear):
                 _init_layer(layer, gain)
 
-        nn.init.orthogonal_(self.mean_layer.weight, gain) # type: ignore
+        nn.init.orthogonal_(self.mean_layer.weight, gain)  # type: ignore
         nn.init.constant_(self.mean_layer.bias, -1.0)
 
     def forward(self, obs):
@@ -242,7 +242,7 @@ class PPOAgent:
             avg_pi_loss /= max(num_batches, 1)
             avg_v_loss /= max(num_batches, 1)
             print(
-                f"Rollout: {time}, Policy Loss: {avg_pi_loss:.3f}, Value Loss: {avg_v_loss:.3f}"
+                f"Rollout: {time}, Policy Loss: {avg_pi_loss:.3f}, Value Loss: {avg_v_loss:.3f}, Average Reward: {rew_t.mean(dim=-1):.3f}"
             )
 
             if time % 100 == 0:

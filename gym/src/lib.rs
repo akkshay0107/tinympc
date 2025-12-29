@@ -143,9 +143,7 @@ impl PyEnvironment {
         let angle_norm = (ntheta.powi(2) + nomega.powi(2).min(1.0)).sqrt(); // [0, sqrt2]
         let angle_score = 1.0 - (angle_norm / SQRT_2);
 
-        let alt_factor = 0.4 * ny.clamp(0.0, 1.0);
-        let potential =
-            (0.3 + alt_factor) * dist_score + 0.3 * angle_score + (0.45 - alt_factor) * speed_score;
+        let potential = 0.5 * dist_score + 0.3 * angle_score + 0.2 * speed_score;
 
         // scaling it to match magnitude of terminal reward
         100.0 * potential

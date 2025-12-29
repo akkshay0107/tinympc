@@ -18,7 +18,7 @@ const GROUND_SIZE: Vector<f32> = vector![40.0, 6.0];
 const ANGULAR_DRAG_COEFFICIENT: f32 = 1.5;
 const LINEAR_DRAG_COEFFICIENT: f32 = 1.0;
 
-pub const MAX_THRUST: f32 = 12.0; // Thruster can offset gravity
+pub const MAX_THRUST: f32 = 15.0; // Thruster can offset gravity
 pub const ROCKET_WIDTH: f32 = 20.0;
 pub const ROCKET_HEIGHT: f32 = 40.0;
 
@@ -183,8 +183,8 @@ impl World {
         );
 
         let torque = Self::cross_product(offset, thrust_force_body);
+        rocket_body.reset_torques(true);
         if torque != 0.0 {
-            rocket_body.reset_torques(true);
             rocket_body.add_torque(torque, true);
         }
     }
