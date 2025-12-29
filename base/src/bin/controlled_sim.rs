@@ -12,17 +12,8 @@ async fn main() {
     let mut game = Game::new();
     let mut policy_net: PolicyNet;
 
-    #[cfg(target_arch = "wasm32")]
-    {
-        ort::set_api(ort_tract::api());
-        policy_net = PolicyNet::new(include_bytes!("./python/models/policy_net.onnx")).unwrap();
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        let model_bytes = std::fs::read("./python/models/policy_net.onnx").unwrap();
-        policy_net = PolicyNet::new(&model_bytes).unwrap();
-    }
+    let model_bytes = include_bytes!("../../../python/models/policy_net.onnx");
+    policy_net = PolicyNet::new(model_bytes).unwrap();
 
     rand::srand(macroquad::miniquad::date::now() as u64); // get different starts on each run
     let start_x: f32 = rand::gen_range(10.0, MAX_POS_X - 10.0);
