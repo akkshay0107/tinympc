@@ -52,7 +52,26 @@ async fn main() {
 
         #[cfg(feature = "logging")]
         {
+            use base::constants::MAX_POS_Y;
+
             println!("Observation state: {:?}", obs.clone());
+
+            // from gym
+            let ndy = (rocket_y - _MIN_POS_Y) / (MAX_POS_Y - _MIN_POS_Y); // [0, 1]
+            let ndx = (2.0 * rocket_x - MAX_POS_X) / MAX_POS_X; // [-1, 1]
+            let sq_dist = ndx.powi(2) + ndy.powi(2); // [0, 2]
+            let dist_score = 1.0 - (sq_dist / 2.0);
+
+            let vel = vel_x.powi(2) + vel_y.powi(2);
+            let sq_max_vel = 400.0; // estimate
+            let vel_score = 1.0 - (vel / sq_max_vel).clamp(0.0, 1.0);
+
+            let ntheta = rocket_angle / 3.1416;
+            let angle_norm = ntheta.powi(2) + ang_vel.clamp(-1.0, 1.0).powi(2); // [0, 2]
+            let angle_score = 1.0 - (angle_norm / 2.0);
+
+            let potential = 100.0 * (0.5 * dist_score + 0.15 * vel_score + 0.35 * angle_score);
+            println!("Potential : {:?}", potential);
         }
 
         let (thrust, gimbal_angle) = if world.is_dragging || rocket_y <= _MIN_POS_Y {

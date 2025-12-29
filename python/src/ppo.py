@@ -12,18 +12,18 @@ def _init_layer(linear: nn.Linear, gain: float):
 
 
 class PolicyNet(nn.Module):
-    def __init__(self, obs_dim, act_dim, hidden_dim=256):
+    def __init__(self, obs_dim, act_dim, hidden_dim=128):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(obs_dim, hidden_dim),
-            nn.ReLU(),
+            nn.Tanh(),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
+            nn.Tanh(),
         )
         self.mean_layer = nn.Linear(hidden_dim, act_dim)
         self.log_std = nn.Parameter(torch.zeros(act_dim))  # std is learnable
 
-        gain = nn.init.calculate_gain("relu")
+        gain = nn.init.calculate_gain("tanh")
         for layer in self.net:
             if isinstance(layer, nn.Linear):
                 _init_layer(layer, gain)
@@ -45,13 +45,13 @@ class ValueNet(nn.Module):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(obs_dim, hidden_dim),
-            nn.ReLU(),
+            nn.Tanh(),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
+            nn.Tanh(),
             nn.Linear(hidden_dim, 1),
         )
 
-        gain = nn.init.calculate_gain("relu")
+        gain = nn.init.calculate_gain("tanh")
         for layer in self.net:
             if isinstance(layer, nn.Linear):
                 _init_layer(layer, gain)
@@ -67,9 +67,9 @@ class PPOAgent:
         gamma=0.995,
         lam=0.95,
         clip_eps=0.2,
-        lr=1e-4,
+        lr=1e-3,
         epochs=4,
-        batch_size=256,
+        batch_size=512,
         ent_coef=0.01,
         vf_coef=0.5,
         device="cpu",
@@ -88,19 +88,6 @@ class PPOAgent:
         self.value = ValueNet(self.env.obs_dim).to(self.device)
         self.policy_optim = Adam(self.policy.parameters(), lr=lr)
         self.value_optim = Adam(self.value.parameters(), lr=lr)
-
-    @staticmethod
-    def _unsquash_action(bounded_action: torch.Tensor) -> torch.Tensor:
-        eps = torch.finfo(bounded_action.dtype).eps
-        a = torch.clamp(bounded_action, -1.0 + eps, 1.0 - eps)
-        return torch.atanh(a)
-
-    @staticmethod
-    def _tanh_log_prob(
-        dist: Normal, raw_action: torch.Tensor, tanh_action: torch.Tensor
-    ) -> torch.Tensor:
-        log_prob = dist.log_prob(raw_action) - torch.log(1 - tanh_action.pow(2) + 1e-6)
-        return log_prob.sum(dim=-1)
 
     def _compute_gae(self, rewards, values, next_values, bootstrap_mask, dones):
         T = rewards.shape[0]
@@ -135,10 +122,10 @@ class PPOAgent:
             v = self.value(obs_t).item()
 
             raw_action = dist.rsample()
-            tanh_action = torch.tanh(raw_action)
-            logp = self._tanh_log_prob(dist, raw_action, tanh_action).item()
+            action = raw_action.clamp(-1.0, 1.0)
+            logp = dist.log_prob(raw_action).sum(dim=-1)
 
-            action_np = tanh_action.squeeze(0).cpu().numpy().astype(np.float32)
+            action_np = action.squeeze(0).cpu().numpy().astype(np.float32)
             next_obs, reward, done, reason = self.env.step(action_np)
             is_trunc = bool(done and (reason == "timeout"))
 
@@ -148,7 +135,7 @@ class PPOAgent:
             v_next = self.value(next_obs_t).item()
 
             obs_buf[t] = obs
-            act_buf[t] = action_np
+            act_buf[t] = raw_action
             logp_buf[t] = logp
             rew_buf[t] = reward
             done_buf[t] = done
@@ -218,13 +205,9 @@ class PPOAgent:
                     adv_mb = adv_t[b]
                     ret_mb = ret_t[b]
 
-                    raw_action = self._unsquash_action(act_mb)
                     dist = self.policy.get_dist(obs_mb)
-                    tanh_action = torch.tanh(raw_action)
-                    logp = self._tanh_log_prob(dist, raw_action, tanh_action)
-                    entropy_proxy = dist.entropy().sum(
-                        dim=-1
-                    )  # entropy from the original normal dist
+                    logp = dist.log_prob(act_mb).sum(dim=-1)
+                    entropy = dist.entropy().sum(dim=-1)
 
                     ratio = torch.exp(logp - logp_old_mb)
                     surr1 = ratio * adv_mb
@@ -234,7 +217,7 @@ class PPOAgent:
                     )
                     pi_loss = (
                         -(torch.min(surr1, surr2)).mean()
-                        - self.ent_coef * entropy_proxy.mean()
+                        - self.ent_coef * entropy.mean()
                     )
 
                     self.policy_optim.zero_grad(set_to_none=True)
@@ -272,7 +255,7 @@ def main():
 
     # constants
     MAX_STEPS = 3000
-    NUM_ROLLOUTS = 1000
+    NUM_ROLLOUTS = 300
 
     env = PyEnvironment(MAX_STEPS)
     agent = PPOAgent(env)

@@ -1,4 +1,4 @@
-use std::f32::consts::PI;
+use std::f32::consts::{PI, SQRT_2};
 
 use base::constants::*;
 use base::world::World;
@@ -120,32 +120,30 @@ impl PyEnvironment {
 
         let (x, y, theta) = self.world.get_rocket_state();
         let (vx, vy, omega) = self.world.get_rocket_dynamics();
-        let next_state = [x, y, theta, vx, vy, omega];
+        let next_state = self._normalize([x, y, theta, vx, vy, omega]);
 
         let (reason, done) = self._episode_status(x, y, theta, vx, vy, omega);
-        let reward = self.calculate_reward(x, y, theta, vx, vy, omega, thrust, gimbal_angle);
+        let reward = self.calculate_reward(x, y, theta, vx, vy, omega);
 
         Ok((next_state, reward, done, reason))
     }
 
     fn calculate_potential(&self, x: f32, y: f32, theta: f32, vx: f32, vy: f32, omega: f32) -> f32 {
+        let [nx, ny, ntheta, nvx, nvy, nomega] = self._normalize([x, y, theta, vx, vy, omega]);
+
         // center is (max_x/2, 0) => potential should be min there
-        let ndy = (y - _MIN_POS_Y) / (MAX_POS_Y - _MIN_POS_Y); // [0, 1]
-        let ndx = (2.0 * x - MAX_POS_X) / MAX_POS_X; // [-1, 1]
-        let sq_dist = ndx.powi(2) + ndy.powi(2); // [0, 2]
-        let dist_score = 1.0 - (sq_dist / 2.0);
+        let ndist = (nx.powi(2) + ny.powi(2)).sqrt(); // [0, sqrt2]
+        let dist_score = 1.0 - (ndist / SQRT_2);
 
         // slow velocity preferred
-        let vel = vx.powi(2) + vy.powi(2);
-        let sq_max_vel = 400.0; // estimate
-        let vel_score = 1.0 - (vel / sq_max_vel).clamp(0.0, 1.0);
+        let speed = (nvx.powi(2) + nvy.powi(2)).sqrt();
+        let speed_score = 1.0 - (speed / SQRT_2).min(1.0);
 
         // reward being upright and not spinning too much
-        let ntheta = theta / PI;
-        let angle_norm = ntheta.powi(2) + omega.clamp(-1.0, 1.0).powi(2); // [0, 2]
-        let angle_score = 1.0 - (angle_norm / 2.0);
+        let angle_norm = (ntheta.powi(2) + nomega.powi(2).min(1.0)).sqrt(); // [0, sqrt2]
+        let angle_score = 1.0 - (angle_norm / SQRT_2);
 
-        100.0 * (0.5 * dist_score + 0.15 * vel_score + 0.35 * angle_score) // scaling it to match magnitude of terminal reward
+        100.0 * (0.5 * dist_score + 0.15 * speed_score + 0.35 * angle_score) // scaling it to match magnitude of terminal reward
     }
 
     fn calculate_reward(
@@ -156,16 +154,12 @@ impl PyEnvironment {
         vx: f32,
         vy: f32,
         omega: f32,
-        thrust: f32,
-        gimbal: f32,
     ) -> f32 {
         let current_potential = self.calculate_potential(x, y, theta, vx, vy, omega);
         // F = gamma * Phi(s') - Phi(s)
         // gamma = 0.99 in this case
         let shaping_reward = 0.99 * current_potential - self.prev_potential;
         self.prev_potential = current_potential;
-
-        let action_penalty = -0.5 * (thrust.powi(2) + gimbal.powi(2));
 
         let mut terminal_reward = 0.0;
         let base_success = 200.0;
@@ -174,22 +168,30 @@ impl PyEnvironment {
             terminal_reward = -base_success;
         } else if self._is_successful_landing(x, y, theta, vx, vy, omega) {
             let ndx = (2.0 * x - MAX_POS_X) / MAX_POS_X;
-            if ndx.abs() > 0.1 {
-                terminal_reward = -base_success / 2.0;
-            } else {
-                terminal_reward = base_success;
-            }
+            terminal_reward = base_success * (-2.0 * ndx.powi(2)).exp(); // gaussian reward
         }
 
-        let time_penalty = 0.25;
-        shaping_reward + action_penalty + terminal_reward - time_penalty
+        let time_penalty = 0.1;
+        shaping_reward + terminal_reward - time_penalty
+    }
+
+    fn _normalize(&self, obs: [f32; 6]) -> [f32; 6] {
+        let nx = (2.0 * obs[0] - MAX_POS_X) / MAX_POS_X;
+        let ny = (obs[1] - _MIN_POS_Y) / (MAX_POS_Y - _MIN_POS_Y);
+        let ntheta = obs[2] / PI;
+
+        let nvx = (2.0 * obs[3]) / MAX_POS_X;
+        let nvy = obs[4] / (MAX_POS_Y - _MIN_POS_Y);
+        let nomega = obs[5] / PI;
+
+        [nx, ny, ntheta, nvx, nvy, nomega]
     }
 
     fn _sample(&self) -> [f32; 6] {
         let mut rng = rand::rng();
 
         let start_x: f32 = rng.random_range(10.0..=(MAX_POS_X - 10.0));
-        let start_y: f32 = rng.random_range(20.0..=MAX_SAFE_Y);
+        let start_y: f32 = rng.random_range(10.0..=MAX_SAFE_Y);
         let start_angle: f32 = rng.random_range(-MAX_ANGLE_DEFLECTION..=MAX_ANGLE_DEFLECTION);
 
         // From the implememtation in base/src/world.rs
