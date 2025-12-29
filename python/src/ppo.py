@@ -27,7 +27,9 @@ class PolicyNet(nn.Module):
         for layer in self.net:
             if isinstance(layer, nn.Linear):
                 _init_layer(layer, gain)
-        _init_layer(self.mean_layer, 0.01)
+
+        nn.init.orthogonal_(self.mean_layer.weight, gain) # type: ignore
+        nn.init.constant_(self.mean_layer.bias, -1.0)
 
     def forward(self, obs):
         x = self.net(obs)

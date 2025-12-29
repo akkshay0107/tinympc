@@ -143,7 +143,12 @@ impl PyEnvironment {
         let angle_norm = (ntheta.powi(2) + nomega.powi(2).min(1.0)).sqrt(); // [0, sqrt2]
         let angle_score = 1.0 - (angle_norm / SQRT_2);
 
-        100.0 * (0.5 * dist_score + 0.15 * speed_score + 0.35 * angle_score) // scaling it to match magnitude of terminal reward
+        let alt_factor = 0.4 * ny.clamp(0.0, 1.0);
+        let potential =
+            (0.3 + alt_factor) * dist_score + 0.3 * angle_score + (0.45 - alt_factor) * speed_score;
+
+        // scaling it to match magnitude of terminal reward
+        100.0 * potential
     }
 
     fn calculate_reward(
@@ -171,7 +176,7 @@ impl PyEnvironment {
             terminal_reward = base_success * (-2.0 * ndx.powi(2)).exp(); // gaussian reward
         }
 
-        let time_penalty = 0.0;
+        let time_penalty = 0.05;
         shaping_reward + terminal_reward - time_penalty
     }
 

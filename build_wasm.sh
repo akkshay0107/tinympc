@@ -101,7 +101,7 @@ HTML=$(
 		        }
 		    </script>
 		    <div id="run-container" style="display: flex; justify-content: center; align-items: center; height: 100%; flex-direction: column;">
-		        <button onclick="run()">Run Game</button>
+		        <button onclick="run()">Run Sim</button>
 		    </div>
 		</body>
 		</html>
@@ -109,7 +109,7 @@ HTML=$(
 )
 
 TARGET_DIR="target/wasm32-unknown-unknown"
-# Build
+
 # edited to specify binary in my code
 if [ -n "$RELEASE" ]; then
 	cargo build --bin controlled_sim --release --target wasm32-unknown-unknown
