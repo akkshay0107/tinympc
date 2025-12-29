@@ -64,7 +64,7 @@ class PPOAgent:
     def __init__(
         self,
         env,
-        gamma=0.995,
+        gamma=0.999,
         lam=0.95,
         clip_eps=0.2,
         lr=1e-3,
@@ -246,6 +246,7 @@ class PPOAgent:
             if time % 100 == 0:
                 torch.save(self.policy.state_dict(), "./models/policy_net.pth")
                 torch.save(self.value.state_dict(), "./models/value_net.pth")
+                print("Checkpoint saved.")
 
 
 def main():
@@ -254,7 +255,7 @@ def main():
     os.makedirs("./models", exist_ok=True)
 
     # constants
-    MAX_STEPS = 3000
+    MAX_STEPS = 8192
     NUM_ROLLOUTS = 300
 
     env = PyEnvironment(MAX_STEPS)

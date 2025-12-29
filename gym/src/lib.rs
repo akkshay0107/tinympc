@@ -108,7 +108,7 @@ impl PyEnvironment {
         rocket.set_linvel(vector![init_state[3], init_state[4]], true);
         rocket.set_angvel(init_state[5], true);
 
-        Ok(init_state)
+        Ok(self._normalize(init_state))
     }
 
     pub fn step(&mut self, action: [f32; 2]) -> PyResult<([f32; 6], f32, bool, &'static str)> {
@@ -171,7 +171,7 @@ impl PyEnvironment {
             terminal_reward = base_success * (-2.0 * ndx.powi(2)).exp(); // gaussian reward
         }
 
-        let time_penalty = 0.1;
+        let time_penalty = 0.0;
         shaping_reward + terminal_reward - time_penalty
     }
 
@@ -190,7 +190,11 @@ impl PyEnvironment {
     fn _sample(&self) -> [f32; 6] {
         let mut rng = rand::rng();
 
-        let start_x: f32 = rng.random_range(10.0..=(MAX_POS_X - 10.0));
+        let spawn_width = 20.0;
+        let left_boundary = MAX_POS_X / 2.0 - spawn_width;
+        let right_boundary = MAX_POS_X / 2.0 + spawn_width;
+
+        let start_x: f32 = rng.random_range(left_boundary..=right_boundary);
         let start_y: f32 = rng.random_range(10.0..=MAX_SAFE_Y);
         let start_angle: f32 = rng.random_range(-MAX_ANGLE_DEFLECTION..=MAX_ANGLE_DEFLECTION);
 
@@ -236,7 +240,7 @@ impl PyEnvironment {
     }
 
     fn _is_oob(&self, x: f32, y: f32) -> bool {
-        x < 0.0 || x > MAX_POS_X || y > MAX_POS_Y
+        x <= 0.0 || x >= MAX_POS_X || y >= MAX_POS_Y
     }
 
     fn _episode_status(
