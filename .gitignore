@@ -1,6 +1,5 @@
 /target
 .*
-!.gitignore
-/python/runs
-/python/models
 __pycache__
+!.github
+!.gitignore
