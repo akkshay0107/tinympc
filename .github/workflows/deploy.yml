@@ -8,21 +8,40 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
+      - name: Add wasm32 target
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Install wasm-bindgen-cli
+        uses: jetli/wasm-bindgen-action@v0.1.0
+        with:
+          version: "0.2.106"
 
       - name: Build wasm
-        run: ./build_wasm.sh controlled_sim --release
+        run: |
+          chmod +x build_wasm.sh
+          # IMPORTANT: The argument 'controlled_sim' MUST match the name
+          # in your Cargo.toml [bin] section, or the script will fail.
+          ./build_wasm.sh controlled_sim --release
 
       - name: Setup Pages
-        uses: actions/configure-pages@v2
+        uses: actions/configure-pages@v5
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v1
+        uses: actions/upload-pages-artifact@v3
         with:
-          path: 'dist'
+          path: "dist"
 
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v1
+        uses: actions/deploy-pages@v4
