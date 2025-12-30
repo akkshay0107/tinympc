@@ -1,3 +1,4 @@
+use crate::world::pixels_per_meter;
 use macroquad::prelude::*;
 
 pub const PARALLAX_SCROLL_SPEED: f32 = 0.08;
@@ -87,7 +88,8 @@ impl Game {
         let grass_color = Color::from_rgba(43, 86, 29, 255);
         let grass_edge_color = Color::from_rgba(34, 69, 20, 255);
 
-        let block_size = 16.0;
+        let ppm = pixels_per_meter();
+        let block_size = 1.6 * ppm;
 
         for x in (0..screen_w as i32).step_by(block_size as usize) {
             let top_y = ground_y;
@@ -133,16 +135,19 @@ impl Game {
         }
     }
 
-    pub fn draw_landing_flags(&self, dist_from_center: f32) {
+    pub fn draw_landing_flags(&self, dist_from_center_m: f32) {
+        let ppm = pixels_per_meter();
+        let dist_from_center = dist_from_center_m * ppm;
+
         let screen_w = screen_width();
         let screen_h = screen_height();
         let ground_y = screen_h * 0.8;
         let center_x = screen_w / 2.0;
 
-        let pole_height = 40.0;
-        let pole_thickness = 2.0;
-        let flag_width = 25.0;
-        let flag_height = 15.0;
+        let pole_height = 4.0 * ppm;
+        let pole_thickness = 0.2 * ppm;
+        let flag_width = 2.5 * ppm;
+        let flag_height = 1.5 * ppm;
 
         let pole_color = WHITE;
         let flag_color = RED;
@@ -186,6 +191,6 @@ impl Game {
         }
 
         self.draw_ground();
-        self.draw_landing_flags(100.0);
+        self.draw_landing_flags(10.0);
     }
 }
