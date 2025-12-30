@@ -112,10 +112,10 @@ TARGET_DIR="target/wasm32-unknown-unknown"
 
 # edited to specify binary in my code
 if [ -n "$RELEASE" ]; then
-	cargo build --bin controlled_sim --release --target wasm32-unknown-unknown
+	cargo build --bin $PROJECT_NAME --release --target wasm32-unknown-unknown
 	TARGET_DIR="$TARGET_DIR/release"
 else
-	cargo build --bin controlled_sim --target wasm32-unknown-unknown
+	cargo build --bin $PROJECT_NAME --target wasm32-unknown-unknown
 	TARGET_DIR="$TARGET_DIR/debug"
 fi
 

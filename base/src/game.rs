@@ -133,6 +133,50 @@ impl Game {
         }
     }
 
+    pub fn draw_landing_flags(&self, dist_from_center: f32) {
+        let screen_w = screen_width();
+        let screen_h = screen_height();
+        let ground_y = screen_h * 0.8;
+        let center_x = screen_w / 2.0;
+
+        let pole_height = 40.0;
+        let pole_thickness = 2.0;
+        let flag_width = 25.0;
+        let flag_height = 15.0;
+
+        let pole_color = WHITE;
+        let flag_color = RED;
+
+        // The landing pad is between the two flags.
+        // One flag is at `center_x - dist_from_center` and the other is at `center_x + dist_from_center`.
+        let positions = [center_x - dist_from_center, center_x + dist_from_center];
+
+        for &x_pos in &positions {
+            // Draw pole
+            draw_line(
+                x_pos,
+                ground_y,
+                x_pos,
+                ground_y - pole_height,
+                pole_thickness,
+                pole_color,
+            );
+
+            // Flags should point inwards to frame the landing zone
+            let direction = if x_pos < center_x { 1.0 } else { -1.0 };
+
+            // Draw flag triangle
+            let v1 = Vec2::new(x_pos, ground_y - pole_height);
+            let v2 = Vec2::new(
+                x_pos + direction * flag_width,
+                ground_y - pole_height + flag_height / 2.0,
+            );
+            let v3 = Vec2::new(x_pos, ground_y - pole_height + flag_height);
+
+            draw_triangle(v1, v2, v3, flag_color);
+        }
+    }
+
     pub fn draw(&self) {
         self.draw_space_atmos();
 
@@ -142,5 +186,6 @@ impl Game {
         }
 
         self.draw_ground();
+        self.draw_landing_flags(100.0);
     }
 }
