@@ -71,7 +71,7 @@ class PPOAgent:
         lr=1e-4,
         epochs=4,
         batch_size=512,
-        ent_coef=1e-3,
+        ent_coef=1e-5,
         device="cpu",
     ):
         self.env = env
@@ -85,7 +85,7 @@ class PPOAgent:
         self.device = torch.device(device)
         self.policy = PolicyNet(self.env.obs_dim, self.env.act_dim).to(self.device)
         self.value = ValueNet(self.env.obs_dim).to(self.device)
-        self.policy_optim = Adam(self.policy.parameters(), lr=3*lr)
+        self.policy_optim = Adam(self.policy.parameters(), lr=lr)
         self.value_optim = Adam(self.value.parameters(), lr=lr)
 
     def _compute_gae(self, rewards, values, next_values, bootstrap_mask, dones):

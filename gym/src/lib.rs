@@ -7,8 +7,6 @@ use rand::Rng;
 use rapier2d::na::Isometry2;
 use rapier2d::prelude::*;
 
-const MAX_SAFE_Y: f32 = MAX_POS_Y - 10.0; // Prevent rocket going out of bounds immediately
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum EpisodeStatus {
     InProgress,
@@ -198,12 +196,24 @@ impl PyEnvironment {
         let mut rng = rand::rng();
 
         let center_x = MAX_POS_X / 2.0;
-        let spawn_width = if self.tot_steps < 500_000 { 5.0 } else { 30.0 };
-        let left_boundary = center_x - spawn_width;
-        let right_boundary = center_x + spawn_width;
 
-        let start_x: f32 = rng.random_range(left_boundary..=right_boundary);
-        let start_y: f32 = rng.random_range(10.0..=MAX_SAFE_Y);
+        let (spawn_width, box_bottom, box_top) = if self.tot_steps < 50_000 {
+            (0.0, 5.0, 5.0)
+        } else if self.tot_steps < 150_000 {
+            (5.0, 10.0, 20.0)
+        } else if self.tot_steps < 500_000 {
+            (10.0, 15.0, 30.0)
+        } else if self.tot_steps < 1_000_000 {
+            (20.0, 20.0, 35.0)
+        } else {
+            (30.0, 30.0, 40.0)
+        };
+
+        let box_left = center_x - spawn_width;
+        let box_right = center_x + spawn_width;
+
+        let start_x: f32 = rng.random_range(box_left..=box_right);
+        let start_y: f32 = rng.random_range(box_bottom..=box_top);
         let start_angle: f32 = rng.random_range(-MAX_ANGLE_DEFLECTION..=MAX_ANGLE_DEFLECTION);
 
         // From the implememtation in base/src/world.rs
