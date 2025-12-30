@@ -89,49 +89,43 @@ impl Game {
         let grass_edge_color = Color::from_rgba(34, 69, 20, 255);
 
         let ppm = pixels_per_meter();
-        let block_size = 1.6 * ppm;
+        let block_size = (1.6 * ppm).max(1.0);
 
-        for x in (0..screen_w as i32).step_by(block_size as usize) {
-            let top_y = ground_y;
+        // Ground base
+        let grass_height = block_size;
+        draw_rectangle(0.0, ground_y, screen_w, grass_height, grass_color);
+        draw_rectangle(
+            0.0,
+            ground_y + grass_height,
+            screen_w,
+            screen_h - (ground_y + grass_height),
+            base_color,
+        );
 
-            // Draw the top grass block
-            draw_rectangle(x as f32, top_y, block_size, block_size, grass_color);
-            draw_rectangle(
-                x as f32,
-                top_y + block_size - 4.0,
-                block_size,
-                4.0,
-                grass_edge_color,
-            );
+        // Top grass block
+        let grass_edge_height = (block_size * 0.25).max(1.0);
+        draw_rectangle(
+            0.0,
+            ground_y + grass_height - grass_edge_height,
+            screen_w,
+            grass_edge_height,
+            grass_edge_color,
+        );
 
-            for y in ((top_y + block_size) as i32..screen_h as i32).step_by(block_size as usize) {
-                let noise_val = (x as f32 * 0.1).sin() + (y as f32 * 0.07).cos();
-                let color = if noise_val > 0.0 {
-                    base_color
-                } else {
-                    shadow_color
-                };
-                draw_rectangle(x as f32, y as f32, block_size, block_size, color);
+        // Dirt texture
+        let num_blocks_x = (screen_w / block_size).ceil() as i32;
+        let num_blocks_y = ((screen_h - (ground_y + grass_height)) / block_size).ceil() as i32;
+
+        for i in 0..num_blocks_x {
+            for j in 0..num_blocks_y {
+                let x = i as f32 * block_size;
+                let y = ground_y + grass_height + j as f32 * block_size;
+
+                let noise_val = (x * 0.1).sin() + (y * 0.07).cos();
+                if noise_val <= 0.0 {
+                    draw_rectangle(x, y, block_size, block_size, shadow_color);
+                }
             }
-        }
-
-        let ground_height = screen_h - ground_y;
-        let num_steps = 20;
-        let step_height = ground_height / num_steps as f32;
-        let shine_top = Color::new(0.1, 0.1, 0.3, 0.2); // More shine at the top
-        let shine_bottom = Color::new(0.05, 0.05, 0.15, 0.0); // Fades out
-
-        for i in 0..num_steps {
-            let y_pos = ground_y + i as f32 * step_height;
-            let t = i as f32 / (num_steps - 1) as f32;
-            let interpolated_color = Color {
-                r: shine_top.r * (1.0 - t) + shine_bottom.r * t,
-                g: shine_top.g * (1.0 - t) + shine_bottom.g * t,
-                b: shine_top.b * (1.0 - t) + shine_bottom.b * t,
-                a: shine_top.a * (1.0 - t) + shine_bottom.a * t,
-            };
-            // 1.0 + step_height to avoid gaps
-            draw_rectangle(0.0, y_pos, screen_w, step_height + 1.0, interpolated_color);
         }
     }
 
@@ -153,11 +147,11 @@ impl Game {
         let flag_color = RED;
 
         // The landing pad is between the two flags.
-        // One flag is at `center_x - dist_from_center` and the other is at `center_x + dist_from_center`.
+        // Flags at center +- dist
         let positions = [center_x - dist_from_center, center_x + dist_from_center];
 
         for &x_pos in &positions {
-            // Draw pole
+            // Pole
             draw_line(
                 x_pos,
                 ground_y,
@@ -167,7 +161,6 @@ impl Game {
                 pole_color,
             );
 
-            // Flags should point inwards to frame the landing zone
             let direction = if x_pos < center_x { 1.0 } else { -1.0 };
 
             // Draw flag triangle
