@@ -8,19 +8,16 @@
 use macroquad::prelude::*;
 use rapier2d::prelude::*;
 
-use crate::constants::MAX_GIMBAL_ANGLE;
-const PIXELS_PER_METER: f32 = 10.0;
+use crate::constants::{MAX_GIMBAL_ANGLE, ROCKET_HEIGHT_M, ROCKET_WIDTH_M};
 
 const GROUND_RESTITUTION: f32 = 0.5;
 const ROCKET_RESTITUTION: f32 = 0.1;
 const ROCKET_MASS: f32 = 1.0;
 const GROUND_SIZE: Vector<f32> = vector![40.0, 6.0];
-const ANGULAR_DRAG_COEFFICIENT: f32 = 1.5;
-const LINEAR_DRAG_COEFFICIENT: f32 = 1.0;
+const ANGULAR_DRAG_COEFFICIENT: f32 = 2.0;
+const LINEAR_DRAG_COEFFICIENT: f32 = 1.5;
 
 pub const MAX_THRUST: f32 = 15.0; // Thruster can offset gravity
-pub const ROCKET_WIDTH: f32 = 20.0;
-pub const ROCKET_HEIGHT: f32 = 40.0;
 
 const TOLERANCE_RADIUS: f32 = 1.5; // Set to the average of the dimensions of the rocket body
 
@@ -107,8 +104,8 @@ impl World {
             .build();
         let rocket_handle = rigid_body_set.insert(rocket_body);
 
-        let half_width = ROCKET_WIDTH / PIXELS_PER_METER / 2.0;
-        let half_height = ROCKET_HEIGHT / PIXELS_PER_METER / 2.0;
+        let half_width = ROCKET_WIDTH_M / 2.0;
+        let half_height = ROCKET_HEIGHT_M / 2.0;
 
         let body_collider = ColliderBuilder::cuboid(half_width, half_height)
             .restitution(ROCKET_RESTITUTION)
@@ -175,7 +172,7 @@ impl World {
         rocket_body.add_force(thrust_force_world, true);
 
         // Find torque on rocket body
-        let y_offset = ROCKET_HEIGHT / (4.0 * PIXELS_PER_METER); // quarter height
+        let y_offset = ROCKET_HEIGHT_M / 4.0; // quarter height
         let offset = (0.0, -y_offset);
         let thrust_force_body = (
             raw_thrust * raw_gimbal_angle.sin(),
@@ -279,16 +276,22 @@ impl Default for World {
     }
 }
 
+pub fn pixels_per_meter() -> f32 {
+    screen_width() / crate::constants::MAX_POS_X
+}
+
 pub fn world_to_pixel(x: f32, y: f32) -> (f32, f32) {
+    let ppm = pixels_per_meter();
     let ground_y = screen_height() * 0.8;
-    let screen_x = x * PIXELS_PER_METER;
-    let screen_y = ground_y - y * PIXELS_PER_METER;
+    let screen_x = x * ppm;
+    let screen_y = ground_y - y * ppm;
     (screen_x, screen_y)
 }
 
 pub fn pixel_to_world(screen_x: f32, screen_y: f32) -> (f32, f32) {
+    let ppm = pixels_per_meter();
     let ground_y = screen_height() * 0.8;
-    let world_x = screen_x / PIXELS_PER_METER;
-    let world_y = (ground_y - screen_y) / PIXELS_PER_METER;
+    let world_x = screen_x / ppm;
+    let world_y = (ground_y - screen_y) / ppm;
     (world_x, world_y)
 }

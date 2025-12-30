@@ -20,7 +20,8 @@ HELP_STRING=$(
 			Edit: Nobbele <realnobbele@gmail.com>
 			Edit: profan <robinhubner@gmail.com>
 			Edit: Nik codes <nik.code.things@gmail.com>
-			Version: 0.4
+			Edit: Akkshay Sundara Rajan <akkshaysr0107@gmail.com>
+			Version: 0.5
 	END
 )
 
@@ -58,6 +59,8 @@ set -- "${POSITIONAL[@]}"
 
 PROJECT_NAME=$1
 
+BUILD_ID=$(date +%s)
+
 HTML=$(
 	cat <<-END
 		<html lang="en">
@@ -82,7 +85,7 @@ HTML=$(
 		    <canvas id="glcanvas" tabindex='1' hidden></canvas>
 		    <script src="https://not-fl3.github.io/miniquad-samples/mq_js_bundle.js"></script>
 		    <script type="module">
-		        import init, { set_wasm } from "./${PROJECT_NAME}.js";
+		        import init, { set_wasm } from "./${PROJECT_NAME}.js?v=${BUILD_ID}";
 		        async function impl_run() {
 		            let wbg = await init();
 		            miniquad_add_plugin({
@@ -91,7 +94,7 @@ HTML=$(
 		                version: "0.0.1",
 		                name: "wbg",
 		            });
-		            load("./${PROJECT_NAME}_bg.wasm");
+		            load("./${PROJECT_NAME}_bg.wasm?v=${BUILD_ID}");
 		        }
 		        window.run = function() {
 		            document.getElementById("run-container").remove();
@@ -112,10 +115,10 @@ TARGET_DIR="target/wasm32-unknown-unknown"
 
 # edited to specify binary in my code
 if [ -n "$RELEASE" ]; then
-	cargo build --bin controlled_sim --release --target wasm32-unknown-unknown
+	cargo build --bin $PROJECT_NAME --release --target wasm32-unknown-unknown
 	TARGET_DIR="$TARGET_DIR/release"
 else
-	cargo build --bin controlled_sim --target wasm32-unknown-unknown
+	cargo build --bin $PROJECT_NAME --target wasm32-unknown-unknown
 	TARGET_DIR="$TARGET_DIR/debug"
 fi
 

@@ -1,3 +1,4 @@
+use crate::world::pixels_per_meter;
 use macroquad::prelude::*;
 
 pub const PARALLAX_SCROLL_SPEED: f32 = 0.08;
@@ -87,49 +88,90 @@ impl Game {
         let grass_color = Color::from_rgba(43, 86, 29, 255);
         let grass_edge_color = Color::from_rgba(34, 69, 20, 255);
 
-        let block_size = 16.0;
+        let ppm = pixels_per_meter();
+        let block_size = (1.6 * ppm).max(1.0);
 
-        for x in (0..screen_w as i32).step_by(block_size as usize) {
-            let top_y = ground_y;
+        // Ground base
+        let grass_height = block_size;
+        draw_rectangle(0.0, ground_y, screen_w, grass_height, grass_color);
+        draw_rectangle(
+            0.0,
+            ground_y + grass_height,
+            screen_w,
+            screen_h - (ground_y + grass_height),
+            base_color,
+        );
 
-            // Draw the top grass block
-            draw_rectangle(x as f32, top_y, block_size, block_size, grass_color);
-            draw_rectangle(
-                x as f32,
-                top_y + block_size - 4.0,
-                block_size,
-                4.0,
-                grass_edge_color,
-            );
+        // Top grass block
+        let grass_edge_height = (block_size * 0.25).max(1.0);
+        draw_rectangle(
+            0.0,
+            ground_y + grass_height - grass_edge_height,
+            screen_w,
+            grass_edge_height,
+            grass_edge_color,
+        );
 
-            for y in ((top_y + block_size) as i32..screen_h as i32).step_by(block_size as usize) {
-                let noise_val = (x as f32 * 0.1).sin() + (y as f32 * 0.07).cos();
-                let color = if noise_val > 0.0 {
-                    base_color
-                } else {
-                    shadow_color
-                };
-                draw_rectangle(x as f32, y as f32, block_size, block_size, color);
+        // Dirt texture
+        let num_blocks_x = (screen_w / block_size).ceil() as i32;
+        let num_blocks_y = ((screen_h - (ground_y + grass_height)) / block_size).ceil() as i32;
+
+        for i in 0..num_blocks_x {
+            for j in 0..num_blocks_y {
+                let x = i as f32 * block_size;
+                let y = ground_y + grass_height + j as f32 * block_size;
+
+                let noise_val = (x * 0.1).sin() + (y * 0.07).cos();
+                if noise_val <= 0.0 {
+                    draw_rectangle(x, y, block_size, block_size, shadow_color);
+                }
             }
         }
+    }
 
-        let ground_height = screen_h - ground_y;
-        let num_steps = 20;
-        let step_height = ground_height / num_steps as f32;
-        let shine_top = Color::new(0.1, 0.1, 0.3, 0.2); // More shine at the top
-        let shine_bottom = Color::new(0.05, 0.05, 0.15, 0.0); // Fades out
+    pub fn draw_landing_flags(&self, dist_from_center_m: f32) {
+        let ppm = pixels_per_meter();
+        let dist_from_center = dist_from_center_m * ppm;
 
-        for i in 0..num_steps {
-            let y_pos = ground_y + i as f32 * step_height;
-            let t = i as f32 / (num_steps - 1) as f32;
-            let interpolated_color = Color {
-                r: shine_top.r * (1.0 - t) + shine_bottom.r * t,
-                g: shine_top.g * (1.0 - t) + shine_bottom.g * t,
-                b: shine_top.b * (1.0 - t) + shine_bottom.b * t,
-                a: shine_top.a * (1.0 - t) + shine_bottom.a * t,
-            };
-            // 1.0 + step_height to avoid gaps
-            draw_rectangle(0.0, y_pos, screen_w, step_height + 1.0, interpolated_color);
+        let screen_w = screen_width();
+        let screen_h = screen_height();
+        let ground_y = screen_h * 0.8;
+        let center_x = screen_w / 2.0;
+
+        let pole_height = 4.0 * ppm;
+        let pole_thickness = 0.2 * ppm;
+        let flag_width = 2.5 * ppm;
+        let flag_height = 1.5 * ppm;
+
+        let pole_color = WHITE;
+        let flag_color = RED;
+
+        // The landing pad is between the two flags.
+        // Flags at center +- dist
+        let positions = [center_x - dist_from_center, center_x + dist_from_center];
+
+        for &x_pos in &positions {
+            // Pole
+            draw_line(
+                x_pos,
+                ground_y,
+                x_pos,
+                ground_y - pole_height,
+                pole_thickness,
+                pole_color,
+            );
+
+            let direction = if x_pos < center_x { 1.0 } else { -1.0 };
+
+            // Draw flag triangle
+            let v1 = Vec2::new(x_pos, ground_y - pole_height);
+            let v2 = Vec2::new(
+                x_pos + direction * flag_width,
+                ground_y - pole_height + flag_height / 2.0,
+            );
+            let v3 = Vec2::new(x_pos, ground_y - pole_height + flag_height);
+
+            draw_triangle(v1, v2, v3, flag_color);
         }
     }
 
@@ -142,5 +184,6 @@ impl Game {
         }
 
         self.draw_ground();
+        self.draw_landing_flags(10.0);
     }
 }

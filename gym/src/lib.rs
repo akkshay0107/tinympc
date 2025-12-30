@@ -7,8 +7,6 @@ use rand::Rng;
 use rapier2d::na::Isometry2;
 use rapier2d::prelude::*;
 
-const MAX_SAFE_Y: f32 = MAX_POS_Y - 10.0; // Prevent rocket going out of bounds immediately
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum EpisodeStatus {
     InProgress,
@@ -35,6 +33,7 @@ pub struct PyEnvironment {
     world: World,
     prev_potential: f32,
     steps: u32,
+    tot_steps: u32,
     max_steps: u32,
     obs_dim: u32,
     act_dim: u32,
@@ -49,6 +48,7 @@ impl PyEnvironment {
             world,
             prev_potential: 0.0,
             steps: 0,
+            tot_steps: 0,
             max_steps,
             obs_dim: 6,
             act_dim: 2,
@@ -57,28 +57,33 @@ impl PyEnvironment {
 
     // world doesn't need a getter
     #[getter]
-    pub fn get_steps(&self) -> PyResult<u32> {
-        Ok(self.steps)
+    pub fn get_steps(&self) -> u32 {
+        self.steps
     }
 
     #[getter]
-    pub fn get_max_steps(&self) -> PyResult<u32> {
-        Ok(self.max_steps)
+    pub fn get_tot_steps(&self) -> u32 {
+        self.tot_steps
     }
 
     #[getter]
-    pub fn get_prev_potential(&self) -> PyResult<f32> {
-        Ok(self.prev_potential)
+    pub fn get_max_steps(&self) -> u32 {
+        self.max_steps
     }
 
     #[getter]
-    pub fn get_obs_dim(&self) -> PyResult<u32> {
-        Ok(self.obs_dim)
+    pub fn get_prev_potential(&self) -> f32 {
+        self.prev_potential
     }
 
     #[getter]
-    pub fn get_act_dim(&self) -> PyResult<u32> {
-        Ok(self.act_dim)
+    pub fn get_obs_dim(&self) -> u32 {
+        self.obs_dim
+    }
+
+    #[getter]
+    pub fn get_act_dim(&self) -> u32 {
+        self.act_dim
     }
 
     pub fn reset(&mut self) -> PyResult<[f32; 6]> {
@@ -132,8 +137,8 @@ impl PyEnvironment {
         let [nx, ny, ntheta, nvx, nvy, nomega] = self._normalize([x, y, theta, vx, vy, omega]);
 
         // center is (max_x/2, 0) => potential should be min there
-        let ndist = (nx.powi(2) + ny.powi(2)).sqrt(); // [0, sqrt2]
-        let dist_score = 1.0 - (ndist / SQRT_2);
+        let ndist = nx.powi(2) + ny.powi(2);
+        let dist_score = 1.0 - (ndist / 2.0);
 
         // slow velocity preferred
         let speed = (nvx.powi(2) + nvy.powi(2)).sqrt();
@@ -143,10 +148,9 @@ impl PyEnvironment {
         let angle_norm = (ntheta.powi(2) + nomega.powi(2).min(1.0)).sqrt(); // [0, sqrt2]
         let angle_score = 1.0 - (angle_norm / SQRT_2);
 
-        let potential = 0.5 * dist_score + 0.3 * angle_score + 0.2 * speed_score;
+        let potential = 0.5 * dist_score + 0.2 * angle_score + 0.3 * speed_score;
 
-        // scaling it to match magnitude of terminal reward
-        100.0 * potential
+        5.0 * potential
     }
 
     fn calculate_reward(
@@ -159,13 +163,11 @@ impl PyEnvironment {
         omega: f32,
     ) -> f32 {
         let current_potential = self.calculate_potential(x, y, theta, vx, vy, omega);
-        // F = gamma * Phi(s') - Phi(s)
-        // gamma = 0.99 in this case
-        let shaping_reward = 0.99 * current_potential - self.prev_potential;
+        let shaping_reward = current_potential - self.prev_potential;
         self.prev_potential = current_potential;
 
         let mut terminal_reward = 0.0;
-        let base_success = 200.0;
+        let base_success = 20.0;
 
         if self._is_crash_landing(x, y, theta, vx, vy, omega) || self._is_oob(x, y) {
             terminal_reward = -base_success;
@@ -174,7 +176,7 @@ impl PyEnvironment {
             terminal_reward = base_success * (-2.0 * ndx.powi(2)).exp(); // gaussian reward
         }
 
-        let time_penalty = 0.05;
+        let time_penalty = 1e-4;
         shaping_reward + terminal_reward - time_penalty
     }
 
@@ -193,12 +195,25 @@ impl PyEnvironment {
     fn _sample(&self) -> [f32; 6] {
         let mut rng = rand::rng();
 
-        let spawn_width = 20.0;
-        let left_boundary = MAX_POS_X / 2.0 - spawn_width;
-        let right_boundary = MAX_POS_X / 2.0 + spawn_width;
+        let center_x = MAX_POS_X / 2.0;
 
-        let start_x: f32 = rng.random_range(left_boundary..=right_boundary);
-        let start_y: f32 = rng.random_range(10.0..=MAX_SAFE_Y);
+        let (spawn_width, box_bottom, box_top) = if self.tot_steps < 50_000 {
+            (0.0, 5.0, 5.0)
+        } else if self.tot_steps < 150_000 {
+            (5.0, 10.0, 20.0)
+        } else if self.tot_steps < 500_000 {
+            (10.0, 15.0, 30.0)
+        } else if self.tot_steps < 1_000_000 {
+            (20.0, 20.0, 35.0)
+        } else {
+            (30.0, 30.0, 40.0)
+        };
+
+        let box_left = center_x - spawn_width;
+        let box_right = center_x + spawn_width;
+
+        let start_x: f32 = rng.random_range(box_left..=box_right);
+        let start_y: f32 = rng.random_range(box_bottom..=box_top);
         let start_angle: f32 = rng.random_range(-MAX_ANGLE_DEFLECTION..=MAX_ANGLE_DEFLECTION);
 
         // From the implememtation in base/src/world.rs

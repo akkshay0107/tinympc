@@ -3,15 +3,34 @@
 //! This module contains the implementation to draw the rocket sprite
 //! based on its internal state and the functions to update its internal
 //! state
+use crate::{
+    constants::{ROCKET_HEIGHT_M, ROCKET_WIDTH_M},
+    world::pixels_per_meter,
+};
 use macroquad::prelude::*;
 
-pub const ROCKET_WIDTH: f32 = 10.0;
-pub const ROCKET_HEIGHT: f32 = 40.0;
+fn rocket_width() -> f32 {
+    ROCKET_WIDTH_M * pixels_per_meter() * 0.5
+}
+
+fn rocket_height() -> f32 {
+    ROCKET_HEIGHT_M * pixels_per_meter()
+}
+
+fn flame_max_length() -> f32 {
+    rocket_height() * 0.3
+}
+
+fn flame_width() -> f32 {
+    rocket_width() * 0.6
+}
+
+fn window_radius() -> f32 {
+    rocket_width() * 0.25
+}
+
 const THRUSTER_WIDTH_RATIO: f32 = 0.4;
 const THRUSTER_HEIGHT_RATIO: f32 = 0.4;
-const FLAME_MAX_LENGTH: f32 = 12.0;
-const FLAME_WIDTH: f32 = 6.0;
-const WINDOW_RADIUS: f32 = 2.5;
 
 const BODY_BASE_COLOR: Color = Color::from_rgba(180, 180, 190, 255);
 const BODY_HIGHLIGHT_COLOR: Color = Color::from_rgba(220, 220, 235, 255);
@@ -73,10 +92,10 @@ impl RocketSprite {
     }
 
     pub fn draw(&self) {
-        let half_width = ROCKET_WIDTH / 2.0;
-        let half_height = ROCKET_HEIGHT / 2.0;
-        let thruster_width = ROCKET_WIDTH * THRUSTER_WIDTH_RATIO;
-        let thruster_height = ROCKET_HEIGHT * THRUSTER_HEIGHT_RATIO;
+        let half_width = rocket_width() / 2.0;
+        let half_height = rocket_height() / 2.0;
+        let thruster_width = rocket_width() * THRUSTER_WIDTH_RATIO;
+        let thruster_height = rocket_height() * THRUSTER_HEIGHT_RATIO;
         let center = vec2(self.x, self.y);
 
         let left_thruster_vertices = [
@@ -107,10 +126,10 @@ impl RocketSprite {
     fn draw_metallic_thruster(&self, vertices: &[Vec2], center: Vec2, is_left: bool) {
         self.draw_rotated_polygon(vertices, center, THRUSTER_BASE_COLOR);
 
-        let thruster_width = ROCKET_WIDTH * THRUSTER_WIDTH_RATIO;
-        let half_width = ROCKET_WIDTH / 2.0;
-        let half_height = ROCKET_HEIGHT / 2.0;
-        let thruster_height = ROCKET_HEIGHT * THRUSTER_HEIGHT_RATIO;
+        let thruster_width = rocket_width() * THRUSTER_WIDTH_RATIO;
+        let half_width = rocket_width() / 2.0;
+        let half_height = rocket_height() / 2.0;
+        let thruster_height = rocket_height() * THRUSTER_HEIGHT_RATIO;
 
         if is_left {
             let highlight_vertices = [
@@ -160,8 +179,8 @@ impl RocketSprite {
     }
 
     fn draw_metallic_body(&self, center: Vec2) {
-        let half_width = ROCKET_WIDTH / 2.0;
-        let half_height = ROCKET_HEIGHT / 2.0;
+        let half_width = rocket_width() / 2.0;
+        let half_height = rocket_height() / 2.0;
         let nose_radius = half_width;
 
         let mut body_vertices = Vec::new();
@@ -204,7 +223,7 @@ impl RocketSprite {
     }
 
     fn draw_rounded_nose_highlight(&self, center: Vec2, radius: f32) {
-        let half_height = ROCKET_HEIGHT / 2.0;
+        let half_height = rocket_height() / 2.0;
         let nose_center_local = vec2(0.0, -half_height + radius);
 
         let cos_a = self.angle.cos();
@@ -223,7 +242,7 @@ impl RocketSprite {
     }
 
     fn draw_window(&self, center: Vec2) {
-        let window_offset_y = -ROCKET_HEIGHT * 0.15;
+        let window_offset_y = -rocket_height() * 0.15;
         let window_local = vec2(0.0, window_offset_y);
 
         let cos_a = self.angle.cos();
@@ -236,13 +255,13 @@ impl RocketSprite {
         draw_circle(
             window_world.x,
             window_world.y,
-            WINDOW_RADIUS + 0.5,
+            window_radius() + 0.5,
             WINDOW_FRAME_COLOR,
         );
         draw_circle(
             window_world.x,
             window_world.y,
-            WINDOW_RADIUS,
+            window_radius(),
             WINDOW_GLASS_COLOR,
         );
 
@@ -260,9 +279,9 @@ impl RocketSprite {
     }
 
     fn draw_flame_effect(&self, center: Vec2) {
-        let half_height = ROCKET_HEIGHT / 2.0;
-        let flame_length = FLAME_MAX_LENGTH * self.thrust.abs();
-        let flame_half_width = FLAME_WIDTH / 2.0;
+        let half_height = rocket_height() / 2.0;
+        let flame_length = flame_max_length() * self.thrust.abs();
+        let flame_half_width = flame_width() / 2.0;
 
         let gimbal_effect = self.gimbal_angle * 0.1;
         let total_angle = self.angle + gimbal_effect;

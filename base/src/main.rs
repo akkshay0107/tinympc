@@ -25,6 +25,7 @@ async fn main() {
             world.end_drag();
         }
 
+        #[allow(unused_mut)]
         let (_, _, _, (mut thrust, mut gimbal_angle)) = game.rocket.get_state();
         world.apply_thruster_forces(thrust, gimbal_angle);
         world.step();
