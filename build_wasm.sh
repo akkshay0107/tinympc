@@ -79,6 +79,27 @@ HTML=$(
 		            position: absolute;
 		            z-index: 0;
 		        }
+                #run-container {
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    height: 100%;
+                    flex-direction: column;
+                    font-family: sans-serif;
+                    text-align: center;
+                }
+                #run-container h1 {
+                    margin-top: 0;
+                }
+                #run-container p {
+                    margin-bottom: 1.5em;
+                    max-width: 600px;
+                }
+                #run-container button {
+                    font-size: 1.2em;
+                    padding: 10px 20px;
+                    cursor: pointer;
+                }
 		    </style>
 		</head>
 		<body style="margin: 0; padding: 0; height: 100vh; width: 100vw;">
@@ -103,7 +124,15 @@ HTML=$(
 		            impl_run();
 		        }
 		    </script>
-		    <div id="run-container" style="display: flex; justify-content: center; align-items: center; height: 100%; flex-direction: column;">
+		    <div id="run-container">
+                <h1>tvc-lander</h1>
+                <p>
+                    This is a simulation of a rocket landing using a Proximal Policy Optimization (PPO) agent for thrust vector control.
+                    The agent will try to land the rocket safely on the landing pad.
+                </p>
+                <p>
+                    Click and drag the rocket to move it to a new position and watch the agent attempt to recover and land.
+                </p>
 		        <button onclick="run()">Run Sim</button>
 		    </div>
 		</body>

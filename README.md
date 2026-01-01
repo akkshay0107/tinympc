@@ -1,15 +1,22 @@
-# tinympc
+# tvc-lander
 
 ![Demo](assets/demo_landing_new.gif)
 
-A Proximal Policy Optimization (PPO) agent trained to emulate an MPC in landing scenarios. The rocket landing simulation is built in Rust using `rapier2d` and `macroquad`, with FFI bindings to python for training the RL model.
+A Proximal Policy Optimization (PPO) agent trained to land a rocket using thrust vector controls. The gym environment is built in Rust using `macroquad` and `rapier2d` and is inspired by the LunarLander task. The landing task has been modified to have continuous control instead of a discrete action space and to be a bit simpler (fixed landing zone, flat land).
+
+## Live Demo
+
+A live demo of the PPO agent is available [here](https://akkshay0107.github.io/tvc-lander/). The demo is a WASM build of the `controlled_sim` binary. The model is still a work in progress (the task is a lot harder than I initially expected).
 
 ## Features
-- 2D rocket landing simulation with physics using `rapier2d` via Rust.
+
+- A physics simulator of the lander and thrust vector controls using `rapier2d` via Rust.
 - FFI Python bindings from the Rust simulation using `pyo3` to create a gym module for training.
 - PPO reinforcement learning agent trained using Python and PyTorch.
+- Curriculum learning for training the PPO agent.
 - Interactive simulation with random start positions and mouse click-and-drag to reposition the rocket.
 - Model inference in Rust (for the controlled simulation) using the ONNX runtime.
+- WASM build for running the simulation in the browser.
 
 ## PPO Model
 
@@ -19,55 +26,57 @@ The Proximal Policy Optimization (PPO) model is trained to control the rocket ba
 
 The observation space is a 6-dimensional vector (since the sim is only in 2D) containing the following in order:
 
--	$x, y$: The x and y coordinates of the rocket in the world.
--	$\theta$: The angle of the rocket from the vertical.
--	$v_x, v_y$: The linear velocity of the rocket in the x and y directions.
--	$\omega$: The angular velocity of the rocket.
+- $x, y$: The x and y coordinates of the rocket in the world.
+- $\theta$: The angle of the rocket from the vertical.
+- $v_x, v_y$: The linear velocity of the rocket in the x and y directions.
+- $\omega$: The angular velocity of the rocket.
+
+The observations are roughly normalized to the range $[-1, 1]$ before being passed to the model. The true physical dimensions of the scene are 80 x 60, with the rocket being 2 x 4 in the same units.
 
 ### Action Space
 
 The action space is a 2-dimensional vector representing standard thrust vector controls:
 
--	$F_{\text{thrust}}$: The amount of thrust to apply, normalized to the range [-1, 1].
--	$\theta_{\text{gimbal}}$: The angle of the gimbal, normalized to the range [-1, 1].
+- $F_{\text{thrust}}$: The amount of thrust to apply, normalized to the range [-1, 1].
+- $\theta_{\text{gimbal}}$: The angle of the gimbal, normalized to the range [-1, 1].
 
 See `base/src/constants.rs` for the true min and max values for the action and observation space.
-
 
 ## Project Structure
 
 The project is divided into three main parts:
 
--   `base`: A Rust crate that contains the simulation (including the game engine, physics, and rendering).
--   `gym`: A Rust crate that provides a Python binding to the simulation for a "gym" style reinforcement learning environment.
--   `python`: Source code for training the PPO agent using PyTorch.
-
+- `base`: A Rust crate that contains the simulation (including the game engine, physics, and rendering).
+- `gym`: A Rust crate that provides a Python binding to the simulation for a "gym" style reinforcement learning environment.
+- `python`: Source code for training the PPO agent using PyTorch.
 
 ## Prerequisites
 
--   [Rust](https://www.rust-lang.org/tools/install)
--   [Python 3.12+](https://www.python.org/downloads/)
--   [Poetry](https://python-poetry.org/docs/#installation)
+- [Rust](https://www.rust-lang.org/tools/install)
+- [Python 3.12 or 3.13](https://www.python.org/downloads/)
+- [Poetry](https://python-poetry.org/docs/#installation)
 
 ## Installation
 
-1.  **Clone the repository:**
+1. **Clone the repository:**
 
-    ```bash
-    git clone https://github.com/akkshay0107/tinympc.git
-    cd tinympc
-    ```
+   ```bash
+   git clone https://github.com/akkshay0107/tvc-lander.git
+   cd tvc-lander
+   ```
 
-2.  **Set up python venv inside poetry and install dependencies:**
+2. **Set up python venv inside poetry and install dependencies:**
 
-    ```bash
-    cd python
-    poetry install
-    ```
+   ```bash
+   cd python
+   poetry install
+   ```
 
 ## Usage
 
 ### Training the Model
+
+The PPO agent is trained using curriculum learning. The training is divided into stages, where each stage increases the difficulty of the landing task. The curriculum is defined in `python/src/ppo.py`.
 
 To train the PPO agent, run the following commands from the `python` directory:
 
@@ -105,3 +114,34 @@ Additionally, the simulation can also be run with keyboard inputs (instead of th
 ```bash
 cargo run --bin base --release --features="keyinput"
 ```
+
+### Web Build
+
+To build the WASM version of the simulation (needs the wasm-bindgen CLI), run the following command from the project root:
+
+```bash
+./build_wasm.sh
+```
+
+This will create a `dist` directory with the WASM build. You can then serve the `dist` directory using a local web server (for example, `python -m http.server`).
+
+## Deployment
+
+The WASM build is automatically deployed to GitHub Pages on every push to the `main` branch. The deployment workflow is defined in `.github/workflows/deploy.yml`.
+
+## Modifying the Code
+
+The code is designed to be modular, but if you'd like to experiment with your own models, you'll need to modify the following files:
+
+- `python/src/ppo.py`: Modify the model parameters and training process here.
+- `python/utils/export_to_onnx.py`: This is currently hardcoded to accept the `PolicyNet` class, but can be adapted for other models.
+- `base/src/bin/controlled_sim.rs`: This loads the model from a hardcoded path and applies post-processing (clamping). This will need to be changed to reflect a new model.
+
+Unlike other gym interfaces, you have some more leeway with what you can do as input to the model by modifying the code in the gym module.
+
+- `gym/src/lib.rs`: You can modify the `calculate_reward` function to change the rewards for the landing task. Additionally, the `_sample` function can be modified to implement different curriculums for curriculum training.
+
+## Future Work
+
+- Achieve parity with the OpenAI Gym interface (standardize the API, add a `render` function).
+- Improve the PPO agent's performance and deploy a more robust solution to the web demo.
