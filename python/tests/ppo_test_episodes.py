@@ -1,12 +1,14 @@
 import sys
-import torch
-from pathlib import Path
 from collections import Counter
+from pathlib import Path
+
+import torch
 from gym import PyEnvironment
 
 project_root = Path(__file__).resolve().parent.parent
 sys.path.append(str(project_root))
 from src.ppo import PPOAgent
+
 
 def print_counter_table(counter: Counter):
     if not counter:
@@ -27,20 +29,22 @@ def print_counter_table(counter: Counter):
     for key, count in sorted_items:
         print(f"{key:<{max_key_len}}  {count:>{max_val_len}}")
 
+
+def select_action(agent, obs):
+    dist = agent.policy.get_dist(obs)
+    raw_action = dist.rsample()
+
+    action = raw_action.clamp(-1.0, 1.0)
+    logp = dist.log_prob(raw_action).sum(dim=-1)
+    return action, logp
+
+
 def run_test_episodes(
     max_steps: int = 3000,
     test_episodes: int = 100,
 ):
     env = PyEnvironment(max_steps)
-    agent = PPOAgent(
-        env,
-        gamma=0.99,
-        lam=0.95,
-        clip_eps=0.1,
-        lr=5e-5,
-        epochs=10,
-        batch_size=64,
-    )
+    agent = PPOAgent(env)
 
     model_dir = "./models"
     policy_net_path = Path(model_dir) / "policy_net.pth"
@@ -68,7 +72,7 @@ def run_test_episodes(
         reason = "N/A"
 
         while not done:
-            action, _ = agent.select_action(obs)
+            action, _ = select_action(agent, obs)
             obs, reward, done, reason = env.step(action)
             total_reward += reward
             steps += 1
