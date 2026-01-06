@@ -8,7 +8,7 @@ def main():
     step = 1
     tot_rew = 0
     while not done:
-        action = [0.85, 0]
+        action = [0, 0]
         obs, reward, done = env.step(action)
         thrust = action
         print(f"{step=} {obs=} {thrust=} {reward=}")

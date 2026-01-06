@@ -10,7 +10,7 @@ A live demo of the PPO agent is available [here](https://akkshay0107.github.io/t
 
 ## Features
 
-- A physics simulator of the lander and thrust vector controls using `rapier2d` via Rust.
+- A physics simulator of the lander and thrust vector controls using `rapier2d`.
 - FFI Python bindings from the Rust simulation using `pyo3` to create a gym module for training.
 - PPO reinforcement learning agent trained using Python and PyTorch.
 - Curriculum learning for training the PPO agent.
@@ -19,8 +19,6 @@ A live demo of the PPO agent is available [here](https://akkshay0107.github.io/t
 - WASM build for running the simulation in the browser.
 
 ## PPO Model
-
-The Proximal Policy Optimization (PPO) model is trained to control the rocket based on the following observation and action spaces:
 
 ### Observation Space
 
@@ -35,7 +33,7 @@ The observations are roughly normalized to the range $[-1, 1]$ before being pass
 
 ### Action Space
 
-The action space is a 2-dimensional vector representing standard thrust vector controls:
+The action space is a 2D vector representing standard thrust vector controls:
 
 - $F_{\text{thrust}}$: The amount of thrust to apply, normalized to the range [-1, 1].
 - $\theta_{\text{gimbal}}$: The angle of the gimbal, normalized to the range [-1, 1].
@@ -43,8 +41,6 @@ The action space is a 2-dimensional vector representing standard thrust vector c
 See `base/src/constants.rs` for the true min and max values for the action and observation space.
 
 ## Project Structure
-
-The project is divided into three main parts:
 
 - `base`: A Rust crate that contains the simulation (including the game engine, physics, and rendering).
 - `gym`: A Rust crate that provides a Python binding to the simulation for a "gym" style reinforcement learning environment.
@@ -76,7 +72,7 @@ The project is divided into three main parts:
 
 ### Training the Model
 
-The PPO agent is trained using curriculum learning. The training is divided into stages, where each stage increases the difficulty of the landing task. The curriculum is defined in `python/src/ppo.py`.
+The PPO agent is trained using curriculum learning. The training is divided into stages, where each stage increases the difficulty of the landing task. The curriculum is defined in `gym/src/lib.rs` in the `_sample` method.
 
 To train the PPO agent, run the following commands from the `python` directory:
 
@@ -120,7 +116,7 @@ cargo run --bin base --release --features="keyinput"
 To build the WASM version of the simulation (needs the wasm-bindgen CLI), run the following command from the project root:
 
 ```bash
-./build_wasm.sh
+./build_wasm.sh controlled_sim --release
 ```
 
 This will create a `dist` directory with the WASM build. You can then serve the `dist` directory using a local web server (for example, `python -m http.server`).
@@ -131,7 +127,7 @@ The WASM build is automatically deployed to GitHub Pages on every push to the `m
 
 ## Modifying the Code
 
-The code is designed to be modular, but if you'd like to experiment with your own models, you'll need to modify the following files:
+The code is not designed to work with external models, but if you'd like to experiment with your own models, you'll need to modify the following files:
 
 - `python/src/ppo.py`: Modify the model parameters and training process here.
 - `python/utils/export_to_onnx.py`: This is currently hardcoded to accept the `PolicyNet` class, but can be adapted for other models.
